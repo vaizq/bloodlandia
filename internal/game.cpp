@@ -123,24 +123,28 @@ void Game::run() {
     while (!WindowShouldClose()) {
         mnet->poll();
         mnet->send(state);
-        update();
-        GameState mirror;
 
-        auto& mail = mnet->getMailbox();
-        if (mail.size() > 0) {
-            while (mail.size() > 1)
+        if (mnet->hasPeer())
+        {
+            update();
+            GameState mirror;
+
+            auto& mail = mnet->getMailbox();
+            if (mail.size() > 0) {
+                while (mail.size() > 1)
+                    mail.pop();
+
+                const auto& latest = mail.front();
                 mail.pop();
-
-            const auto& latest = mail.front();
-            mail.pop();
-            state.enemyPos = latest.playerPos;
-            if (!judge) {
-                state.ballPosX = screenWidth - latest.ballPosX;
-                state.ballPosY = latest.ballPosY;
-                state.ballVeloX = -latest.ballVeloX;
-                state.ballVeloY = latest.ballVeloY;
-                state.playerScore = latest.enemyScore;
-                state.enemyScore = latest.playerScore;
+                state.enemyPos = latest.playerPos;
+                if (!judge) {
+                    state.ballPosX = screenWidth - latest.ballPosX;
+                    state.ballPosY = latest.ballPosY;
+                    state.ballVeloX = -latest.ballVeloX;
+                    state.ballVeloY = latest.ballVeloY;
+                    state.playerScore = latest.enemyScore;
+                    state.enemyScore = latest.playerScore;
+                }
             }
         }
 
