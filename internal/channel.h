@@ -17,6 +17,7 @@ struct Header {
 class Connection {
 public:
 	using Listener = std::function<void(char*, size_t)>;
+	using Handler = std::function<void(std::error_code ec, size_t)>;
 
 	Connection(udp::endpoint peer, unsigned short bindPort)
 	: socket{ioc, udp::endpoint{udp::v4(), bindPort}},
@@ -25,7 +26,7 @@ public:
 		startReceive();
 	}
 
-	void write(Channel channel, const void* data, size_t dataLen) {
+	void write(Channel channel, const void* data, size_t dataLen, Handler handler = [](std::error_code, size_t){}) {
 		Header h{channel, (uint32_t)dataLen};
 		char buf[sizeof h + dataLen];
 		std::memcpy(buf, &h, sizeof h);
@@ -34,7 +35,8 @@ public:
 		socket.async_send_to(
 			asio::buffer(buf, sizeof buf),
 			peer,
-			[](std::error_code ec, size_t n) {
+			[handler](std::error_code ec, size_t n) {
+				handler(ec, n);
 				if (ec) {
 					fprintf(stderr, "ERROR Connection::write: %s\n", ec.message().c_str());
 				}

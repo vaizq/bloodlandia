@@ -1,67 +1,83 @@
 #ifndef PING_H
 #define PING_H
 
-
-#include <asio.hpp>
 #include <chrono>
+#include "channel.h"
+
 
 using udp = asio::ip::udp;
+
+
+constexpr Channel pingChannel1 = 71;
+constexpr Channel pingChannel2 = 72;
+
 
 class Ping {
 public:
 	using Clock = std::chrono::high_resolution_clock;
 
-	Ping(udp::socket& socket, udp::endpoint endpoint, Clock::duration interval = std::chrono::milliseconds(100))
-	: socket{socket}, 
-	  endpoint{std::move(endpoint)}, 
+	Ping(Connection& connection, Clock::duration interval = std::chrono::milliseconds(100))
+	: connection{connection},
 	  interval{interval},
-	  timer{socket.get_executor()}
+	  timer{connection.get_executor()}
 	{
-		receive();
+		connection.listen(
+			pingChannel1, 
+			[this](char* data, size_t n) {
+				uint32_t receivedID;
+				std::memcpy(&receivedID, data, sizeof receivedID);
+				const auto dt = Clock::now() - prevSend;
+				if (receivedID == id) {
+					ping = dt;
+				} else if (receivedID < id){
+					ping = dt + this->interval * (id - receivedID);
+				} else {
+					fprintf(stderr, "ERROR: invalid ping ID received: expecting %d received %d\n", id, receivedID);
+				}	
+			}
+		);
+
+		// Send pings back
+		connection.listen(
+			pingChannel2, 
+			[this](char* data, size_t n) {
+				uint32_t receivedID;
+				std::memcpy(&receivedID, data, sizeof receivedID);
+				this->connection.write(pingChannel1, &receivedID, sizeof receivedID);
+			}
+		);
+
 		send();
 	}
+
+	Clock::duration value() const { 
+		return ping; 
+	}
+
 private:
 	void send() {
 		++id;
-		std::memcpy(bufOut, &id, sizeof bufOut);
-		socket.async_send_to(
-			asio::buffer(bufOut, sizeof bufOut),
-			endpoint,
-			[this](std::error_code ec, size_t n) {
+		connection.write(
+			pingChannel1, 
+			&id, 
+			sizeof id, 
+			[this](std::error_code ec, size_t) {
 				prevSend = Clock::now();
 				timer.expires_after(interval);
 				timer.async_wait([this](std::error_code ec) {
 					send();
 				});
-		});
+			}
+		);
+
 	}
 
-	void receive() {
-		socket.async_receive(
-			asio::buffer(bufIn, sizeof bufIn),
-			[this](std::error_code ec, size_t n) {
-				uint32_t receivedID;
-				std::memcpy(&receivedID, bufIn, sizeof receivedID);
-				const auto dt = Clock::now() - prevSend;
-				if (receivedID == id) {
-					ping = dt;
-				} else if (receivedID < id){
-					ping = dt + interval * (id - receivedID);
-				} else {
-					fprintf(stderr, "ERROR: invalid ping ID received: expecting %d received %d\n", id, receivedID);
-				}
-		});
-	}
-
-	udp::socket& socket;
-	udp::endpoint endpoint;
+	Connection& connection;
 	const Clock::duration interval;
 	asio::high_resolution_timer timer;
 	uint32_t id;
 	Clock::time_point prevSend;
 	Clock::duration ping;
-	char bufOut[sizeof id];
-	char bufIn[sizeof id];
 };
 
 
