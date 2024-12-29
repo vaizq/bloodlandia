@@ -106,9 +106,16 @@ void Game::drawScore() {
     DrawText(s, screenWidth/2 -18, 10, 24, WHITE); 
 }
 
+void Game::drawPing() {
+    char s[64];
+    std::snprintf(s, sizeof s, "ping %ld", std::chrono::duration_cast<std::chrono::milliseconds>(mnet->getPing()).count());
+    DrawText(s, 10, 10, 16, WHITE); 
+}
+
 void Game::renderGame() {
     BeginDrawing();
     ClearBackground(BLACK);
+    drawPing();
     drawScore();
     DrawRectangle(0, state.enemyPos, paddleWidth, paddleHeight, WHITE);
     DrawRectangle(screenWidth - paddleWidth, state.playerPos, paddleWidth, paddleHeight, WHITE);
@@ -160,11 +167,9 @@ void Game::run() {
         {
                 mnet->poll();
 
-                if (Clock::now() - mnet->prevSendTime() > 10ms) {
-                    mnet->send(state);
-                }
+                mnet->send(state);
 
-                if (!mnet->hasPeer()) {
+                if (mnet->getPing() > 1000ms) {
                     printf("Lost connection to peer!\n");
                     status = GameStatus::Pending;
                     break;

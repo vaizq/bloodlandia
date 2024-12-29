@@ -3,13 +3,18 @@
 
 #include <chrono>
 #include "channel.h"
+#include "util.h"
 
 
 using udp = asio::ip::udp;
 
 
 constexpr Channel pingChannel1 = 71;
-constexpr Channel pingChannel2 = 72;
+
+struct PingMessage {
+	uint32_t senderID;
+	uint32_t pingID;
+};
 
 
 class Ping {
@@ -21,46 +26,50 @@ public:
 	  interval{interval},
 	  timer{connection.get_executor()}
 	{
-		connection.listen(
-			pingChannel1, 
-			[this](char* data, size_t n) {
-				uint32_t receivedID;
-				std::memcpy(&receivedID, data, sizeof receivedID);
-				const auto dt = Clock::now() - prevSend;
-				if (receivedID == id) {
-					ping = dt;
-				} else if (receivedID < id){
-					ping = dt + this->interval * (id - receivedID);
-				} else {
-					fprintf(stderr, "ERROR: invalid ping ID received: expecting %d received %d\n", id, receivedID);
-				}	
-			}
-		);
-
-		// Send pings back
-		connection.listen(
-			pingChannel2, 
-			[this](char* data, size_t n) {
-				uint32_t receivedID;
-				std::memcpy(&receivedID, data, sizeof receivedID);
-				this->connection.write(pingChannel1, &receivedID, sizeof receivedID);
-			}
-		);
-
+		prevReceive = Clock::now();
+		msg.senderID = RandInt(std::numeric_limits<int>::max());
+		listen();	
 		send();
 	}
 
 	Clock::duration value() const { 
+		if (Clock::now() - prevReceive > std::chrono::milliseconds(1000)) {
+			return std::chrono::milliseconds(1001);
+		}
 		return ping; 
 	}
 
 private:
+	void listen() {
+		connection.listen(
+			pingChannel1, 
+			[this](char* data, size_t n) {
+				if (n < sizeof (PingMessage)) {
+					fprintf(stderr, "ERROR: received ping message is too small. (%ld bytes)\n", n);
+				}
+				PingMessage received;
+				std::memcpy(&received, data, sizeof received);
+
+				const auto dt = Clock::now() - prevSend;
+				if (received.senderID == msg.senderID) {
+					prevReceive = Clock::now();
+					ping = dt;
+				} else {
+					connection.write(
+						pingChannel1,
+						&received,
+						sizeof received
+					);
+				}
+			}
+		);
+	}
 	void send() {
-		++id;
+		++msg.pingID;
 		connection.write(
 			pingChannel1, 
-			&id, 
-			sizeof id, 
+			&msg, 
+			sizeof msg, 
 			[this](std::error_code ec, size_t) {
 				prevSend = Clock::now();
 				timer.expires_after(interval);
@@ -69,15 +78,15 @@ private:
 				});
 			}
 		);
-
 	}
 
 	Connection& connection;
 	const Clock::duration interval;
 	asio::high_resolution_timer timer;
-	uint32_t id;
+	PingMessage msg{0};
 	Clock::time_point prevSend;
-	Clock::duration ping;
+	Clock::time_point prevReceive;
+	Clock::duration ping{0};
 };
 
 

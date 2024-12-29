@@ -34,6 +34,7 @@ private:
 	void update();
 	void renderGame();
 	void drawScore();
+	void drawPing();
 
 	const char* serverAddr;
 	bool judge{false};
