@@ -13,7 +13,9 @@
 using udp = asio::ip::udp;
 
 
-constexpr Channel channel = 69;
+constexpr Channel mailChannel = 69;
+constexpr Channel pingChannel = 70;
+
 
 
 struct Ping {
@@ -32,33 +34,29 @@ public:
 	{
 		prevPingReceived = Clock::now();
 		ping();
-		connection.listen(channel, [this](char* buf, size_t n) {
-			switch (n)
-			{
-			case sizeof (Mail):
-			{
+		connection.listen(mailChannel, [this](char* buf, size_t n) {
+			if (n == sizeof (Mail)) {
 				Mail mail;
 				memcpy(&mail, buf, sizeof mail);
 				mailbox.push(mail);
-				break;
+			} else {
+				fprintf(stderr, "ERROR (mail) invalid number of bytes received\n");
 			}
-			case sizeof (Ping):
-			{
+		});
+
+		connection.listen(pingChannel, [this](char* buf, size_t n) {
+			if (n == sizeof prevPing) {
 				memcpy(&prevPing, buf, sizeof prevPing);
 				prevPingReceived = Clock::now();
-				break;
+			} else {
+				fprintf(stderr, "ERROR (ping) invalid number of bytes received\n");
 			}
-			default:
-				printf("ERROR: invalid number of bytes received: %ld\n", n);
-			}
-
-			receive();
 		});
 	}
 
 	void send(const Mail& mail) 
 	{
-		connection.write(channel, &mail, sizeof mail);
+		connection.write(mailChannel, &mail, sizeof mail);
 		prevSend = Clock::now();
 	}
 
@@ -67,7 +65,7 @@ public:
 	}
 
 	bool hasPeer() {
-		return Clock::now() - prevPingReceived < std::chrono::milliseconds(500);
+		return Clock::now() - prevPingReceived < std::chrono::milliseconds(1000);
 	}
 
 	std::queue<Mail>& getMailbox() {
@@ -79,12 +77,9 @@ public:
 		connection.poll();
 	}
 private:
-	void receive() {
-	}
-
 	void ping() {
 		++nextPing.id;
-		connection.write(channel, &nextPing, sizeof nextPing);
+		connection.write(pingChannel, &nextPing, sizeof nextPing);
 		pingTimer.expires_after(pingInterval);
 		pingTimer.async_wait([this](std::error_code ec) {
 			ping();

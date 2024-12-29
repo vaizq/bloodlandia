@@ -160,7 +160,7 @@ void Game::run() {
         {
                 mnet->poll();
 
-                if (Clock::now() - mnet->prevSendTime() > 33ms) {
+                if (Clock::now() - mnet->prevSendTime() > 10ms) {
                     mnet->send(state);
                 }
 
