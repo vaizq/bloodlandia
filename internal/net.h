@@ -3,6 +3,7 @@
 
 #include <asio.hpp>
 #include <asio/high_resolution_timer.hpp>
+#include <asio/ip/address.hpp>
 #include <asio/placeholders.hpp>
 #include <chrono>
 #include <queue>
@@ -21,11 +22,12 @@ class net
 {
 	using Clock = std::chrono::high_resolution_clock;
 public:
-	net(unsigned short port, unsigned short peerPort) 
+	net(unsigned short port, const udp::endpoint& peer) 
 	: sock{ioc, udp::endpoint{udp::v4(), port}},
-	  peer{udp::endpoint{udp::v4(), peerPort}},
+	  peer{peer},
 	  pingTimer{ioc}
 	{
+		prevPingReceived = Clock::now();
 		ping();
 		receive();
 	}

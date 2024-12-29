@@ -3,6 +3,7 @@
 
 #include <memory>
 #include "net.h"
+#include "queueclient.hpp"
 
 struct GameState {
 	int playerPos;
@@ -15,23 +16,32 @@ struct GameState {
 	int enemyScore = 0;
 };
 
+enum class GameStatus
+{
+	Pending,
+	Queue,
+	Playing,
+};
+
 class Game {
 	using Clock = std::chrono::high_resolution_clock;
 public:
-	Game(unsigned short port, unsigned short peerPort, bool judge = false);
+	Game(const char* serverAddr);
 	void run();
 private:
 	void init();
 	void restart();
 	void update();
-	void render();
+	void renderGame();
 	void drawScore();
 
-	unsigned short port, peerPort;
-	bool judge;
+	const char* serverAddr;
+	bool judge{false};
 	std::unique_ptr<net<GameState>> mnet;
+	std::unique_ptr<QueueClient> qc;
 	GameState state;
 	Clock::time_point prevUpdate;
+	GameStatus status = GameStatus::Pending;
 };
 
 

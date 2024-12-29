@@ -24,17 +24,13 @@ GameState mirrorize(const GameState& state) {
     return mirror;
 }
 
-Game::Game(unsigned short port, unsigned short peerPort, bool judge)
-: port{port}, peerPort{peerPort}, judge{judge}
+Game::Game(const char* serverAddr)
+: serverAddr{serverAddr}
 {}
 
 void Game::init() {
     InitWindow(screenWidth, screenHeight, "PongOnline");
     SetTargetFPS(60);
-
-    restart();
-
-    prevUpdate = Clock::now();
 }
 
 void Game::restart() {
@@ -44,6 +40,7 @@ void Game::restart() {
     state.ballVeloY = sqrt(ballSpeed*ballSpeed-state.ballVeloX*state.ballVeloX * RandSign());
     state.playerPos = screenHeight/2;
     state.enemyPos = screenHeight/2;
+    prevUpdate = Clock::now();
 }
 
 void Game::update() {
@@ -106,7 +103,7 @@ void Game::drawScore() {
     DrawText(s, screenWidth/2 -18, 10, 24, WHITE); 
 }
 
-void Game::render() {
+void Game::renderGame() {
     BeginDrawing();
     ClearBackground(BLACK);
     drawScore();
@@ -116,39 +113,83 @@ void Game::render() {
     EndDrawing();
 }
 
+void renderQueue() {
+    BeginDrawing();
+    ClearBackground(BLACK);
+    DrawText("You are in a queue waiting for opponent...", 50, screenHeight/2, 24, WHITE); 
+    EndDrawing();
+}
+
 void Game::run() {
-    mnet = std::make_unique<net<GameState>>(port, peerPort);
+
     init();
-
     while (!WindowShouldClose()) {
-        mnet->poll();
-        mnet->send(state);
-
-        if (mnet->hasPeer())
+        switch (status) {
+        case GameStatus::Pending:
         {
-            update();
-            GameState mirror;
-
-            auto& mail = mnet->getMailbox();
-            if (mail.size() > 0) {
-                while (mail.size() > 1)
-                    mail.pop();
-
-                const auto& latest = mail.front();
-                mail.pop();
-                state.enemyPos = latest.playerPos;
-                if (!judge) {
-                    state.ballPosX = screenWidth - latest.ballPosX;
-                    state.ballPosY = latest.ballPosY;
-                    state.ballVeloX = -latest.ballVeloX;
-                    state.ballVeloY = latest.ballVeloY;
-                    state.playerScore = latest.enemyScore;
-                    state.enemyScore = latest.playerScore;
-                }
-            }
+                BeginDrawing();
+                ClearBackground(BLACK);
+                EndDrawing();
+                qc = std::make_unique<QueueClient>(serverAddr, "6969");
+                qc->start();
+                status = GameStatus::Queue;
+                break;
         }
+        case GameStatus::Queue:
+        {
+                qc->poll();
+                if (qc->hasPeer()) {
+                    printf("Found peer at %s:%d\nGame starts%s\n", 
+                           qc->getPeer().address().to_string().c_str(), 
+                           qc->getPeer().port(),
+                           (qc->isJudge() ? " and your the judge!" : "!"));
+                    mnet = std::make_unique<net<GameState>>(qc->getBindPort(), qc->getPeer());
+                    status = GameStatus::Playing;
+                    judge = qc->isJudge();
+                    qc.reset();
+                    restart();
+                    break;
+                }
+                renderQueue();
+                break;
+        }
+        case GameStatus::Playing:
+        {
+                mnet->poll();
+                mnet->send(state);
 
-        render();
+                if (!mnet->hasPeer()) {
+                    printf("Lost connection to peer!\n");
+                    status = GameStatus::Pending;
+                    break;
+                }
+
+                update();
+                GameState mirror;
+
+                auto& mail = mnet->getMailbox();
+                if (mail.size() > 0) {
+                    while (mail.size() > 1)
+                        mail.pop();
+
+                    const auto& latest = mail.front();
+                    mail.pop();
+                    state.enemyPos = latest.playerPos;
+                    if (!judge) {
+                        state.ballPosX = screenWidth - latest.ballPosX;
+                        state.ballPosY = latest.ballPosY;
+                        state.ballVeloX = -latest.ballVeloX;
+                        state.ballVeloY = latest.ballVeloY;
+                        state.playerScore = latest.enemyScore;
+                        state.enemyScore = latest.playerScore;
+                    }
+                }
+                renderGame();
+                break;
+        }
+        default:
+                printf("default\n");
+        }
     }
 
     CloseWindow();
