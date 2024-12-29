@@ -23,7 +23,7 @@ public:
 	  peer{std::move(peer)}
 	{}
 
-	void write(Channel channel, char* data, size_t dataLen) {
+	void write(Channel channel, const void* data, size_t dataLen) {
 		Header h{channel, dataLen};
 		char buf[sizeof h + dataLen];
 		std::memcpy(buf, &h, sizeof h);
@@ -45,6 +45,10 @@ public:
 
 	void poll() {
 		ioc.poll();
+	}
+
+	asio::io_context& get_executor() {
+		return ioc;
 	}
 
 private:

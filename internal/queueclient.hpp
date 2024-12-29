@@ -26,14 +26,14 @@ public:
 			}
 			printf("connected!\n");
 			asio::async_read(socket,
-				asio::buffer(buf, sizeof (Header)),
+				asio::buffer(buf, sizeof (proto::Header)),
 				[this](std::error_code ec, size_t n) {
 					if (ec) {
 						fprintf(stderr, "ERROR: failed to receive header: %s\n", ec.message().c_str());
 						start();
 						return;
 					}
-					Header h;
+					proto::Header h;
 					std::memcpy(&h, buf, sizeof h);
 					asio::async_read(socket,
 						asio::buffer(buf, h.payloadSize),
@@ -69,11 +69,11 @@ public:
 		ioc.poll();
 	}
 private:
-	void handlePayload(const Header& h) {
+	void handlePayload(const proto::Header& h) {
 		switch (h.payloadType) {
-		case PayloadType::ConnectInfo:
+		case proto::PayloadType::ConnectInfo:
 		{
-			ConnectInfo info;
+			proto::ConnectInfo info;
 			std::memcpy(&info, buf, sizeof info);
 			bindPort = info.bindPort;
 			endpoint = asio::ip::udp::endpoint(asio::ip::make_address(info.peerAddress), info.peerPort);

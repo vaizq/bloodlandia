@@ -5,6 +5,8 @@
 #include <string>
 #include <cstring>
 
+namespace proto {
+
 enum class PayloadType : uint32_t {
 	ConnectInfo
 };
@@ -27,5 +29,7 @@ struct ConnectInfo {
 	uint32_t peerPort;
 	bool isJudge{false};
 };
+
+}
 
 #endif

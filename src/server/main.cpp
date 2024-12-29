@@ -15,7 +15,7 @@ using tcp = asio::ip::tcp;
 struct Player
 {
     virtual std::string address() = 0;
-    virtual asio::awaitable<void> send(ConnectInfo info) = 0;
+    virtual asio::awaitable<void> send(proto::ConnectInfo info) = 0;
 };
 
 using PlayerPtr = std::shared_ptr<Player>;
@@ -45,7 +45,7 @@ public:
             uint32_t portB = freePorts.back(); freePorts.pop_back();
 
             try {
-                ConnectInfo info{portA, player->address(), portB, true};
+                proto::ConnectInfo info{portA, player->address(), portB, true};
                 co_await peer->send(info);
             } catch (const std::exception& e) {
                 fprintf(stderr, "Failed to send connect info to peer: %s\n", e.what());
@@ -54,7 +54,7 @@ public:
             }
 
             try {
-                ConnectInfo info{portB, peer->address(), portA};
+                proto::ConnectInfo info{portB, peer->address(), portA};
                 co_await player->send(info);
             } catch (const std::exception& e) {
                 fprintf(stderr, "Failed to send connect info to player: %s\n", e.what());
@@ -91,9 +91,9 @@ public:
         return socket.remote_endpoint().address().to_string();
     }
 
-    asio::awaitable<void> send(ConnectInfo info) override
+    asio::awaitable<void> send(proto::ConnectInfo info) override
     {
-        Header h{PayloadType::ConnectInfo, sizeof info};
+        proto::Header h{proto::PayloadType::ConnectInfo, sizeof info};
         char buf[sizeof h + sizeof info];
         std::memcpy(buf, &h, sizeof h);
         std::memcpy(buf + sizeof h, &info, sizeof info);
