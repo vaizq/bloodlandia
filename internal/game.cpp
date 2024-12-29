@@ -5,6 +5,9 @@
 #include <cstring>
 
 
+using namespace std::chrono_literals;
+
+
 const int screenWidth = 800;
 const int screenHeight = 450;
 const int paddleHeight = 100;
@@ -30,7 +33,7 @@ Game::Game(const char* serverAddr)
 
 void Game::init() {
     InitWindow(screenWidth, screenHeight, "PongOnline");
-    SetTargetFPS(60);
+    SetTargetFPS(144);
 }
 
 void Game::restart() {
@@ -156,7 +159,10 @@ void Game::run() {
         case GameStatus::Playing:
         {
                 mnet->poll();
-                mnet->send(state);
+
+                if (Clock::now() - mnet->prevSendTime() > 33ms) {
+                    mnet->send(state);
+                }
 
                 if (!mnet->hasPeer()) {
                     printf("Lost connection to peer!\n");

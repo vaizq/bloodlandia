@@ -20,9 +20,15 @@ struct Player
 
 using PlayerPtr = std::shared_ptr<Player>;
 
+
 class MatchQueue
 {
 public:
+    MatchQueue() {
+        for (uint32_t i = 7000; i < 12000; ++i) {
+            freePorts.push_back(i);
+        }
+    }
     asio::awaitable<void> join(PlayerPtr player)
     {
         auto executor = co_await asio::this_coro::executor;
@@ -34,16 +40,32 @@ public:
         else
         {
             auto peer = players.front(); players.pop();
-            ConnectInfo playerInfo{9692, peer->address(), 9420, true};
-            ConnectInfo peerInfo{9420, player->address(), 9692};
 
-            co_spawn(executor, player->send(playerInfo), asio::detached);
-            co_spawn(executor, peer->send(peerInfo), asio::detached); 
-            printf("Matched two players\n");
+            uint32_t portA = freePorts.back(); freePorts.pop_back();
+            uint32_t portB = freePorts.back(); freePorts.pop_back();
+
+            try {
+                ConnectInfo info{portA, player->address(), portB, true};
+                co_await peer->send(info);
+            } catch (const std::exception& e) {
+                fprintf(stderr, "Failed to send connect info to peer: %s\n", e.what());
+                players.push(player);
+                co_return;
+            }
+
+            try {
+                ConnectInfo info{portB, peer->address(), portA};
+                co_await player->send(info);
+            } catch (const std::exception& e) {
+                fprintf(stderr, "Failed to send connect info to player: %s\n", e.what());
+                players.push(peer);
+                co_return;
+            }
         }
     }
 private:
     std::queue<PlayerPtr> players;
+    std::vector<uint32_t> freePorts;
 };
 
 class PlayerSession
@@ -53,16 +75,12 @@ class PlayerSession
 public:
     PlayerSession(tcp::socket socket, MatchQueue& mq)
     :   socket{std::move(socket)}, 
-        mq{mq},
-        timer{socket.get_executor()}
+        mq{mq}
     {
-        timer.expires_after(std::chrono::seconds::max());
-        timer.async_wait([](auto){});
     }
 
     void start()
     {
-        printf("starting player session\n");
         co_spawn(socket.get_executor(),
                  [self = shared_from_this()]{ return self->mq.join(self); },
                  asio::detached);
@@ -80,13 +98,11 @@ public:
         std::memcpy(buf, &h, sizeof h);
         std::memcpy(buf + sizeof h, &info, sizeof info);
         co_await asio::async_write(socket, asio::buffer(buf, sizeof buf), asio::use_awaitable);
-        timer.cancel();
     }
 
 private:
     tcp::socket socket;
     MatchQueue& mq;
-    asio::high_resolution_timer timer;
 };
 
 

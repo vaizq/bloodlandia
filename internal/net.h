@@ -39,10 +39,20 @@ public:
 			asio::buffer(bufOut, sizeof bufOut), 
 			peer, 
 			[](std::error_code ec, size_t bytesTransferred){
+				if (ec) {
+					fprintf(stderr, "ERROR: %s\n", ec.message().c_str());
+					return;
+				}
 				if (bytesTransferred != sizeof (Mail)) {
 					printf("ERROR: invalid number of bytes sent: %ld\n", bytesTransferred);
+					return;
 				}
 		});
+		prevSend = Clock::now();
+	}
+
+	Clock::time_point prevSendTime() {
+		return prevSend;
 	}
 
 	bool hasPeer() {
@@ -125,6 +135,7 @@ private:
 	char bufOutPing[sizeof (Ping)];
 	asio::high_resolution_timer pingTimer;
 	static constexpr Clock::duration pingInterval = std::chrono::milliseconds(100);
+	Clock::time_point prevSend;
 };
 
 #endif
