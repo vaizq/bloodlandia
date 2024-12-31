@@ -127,7 +127,7 @@ asio::awaitable<void> listener(unsigned short port)
 int main(int argc, char** argv) 
 {
     if (argc != 2) {
-        printf("usage: app port");
+        printf("usage: app port\n");
         return -1;
     }
 

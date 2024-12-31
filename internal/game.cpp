@@ -12,24 +12,14 @@
 using namespace std::chrono_literals;
 
 
-const int screenWidth = 800;
-const int screenHeight = 450;
-const int paddleHeight = 100;
-const int paddleWidth = 20;
-const int ballRadius = 20;
-const int paddleSpeed = 400;
-const int ballSpeed = 500;
+constexpr int screenWidth = 800;
+constexpr int screenHeight = 400;
+constexpr int paddleHeight = 100;
+constexpr int paddleWidth = 20;
+constexpr int ballRadius = 20;
+constexpr int paddleSpeed = 400;
+constexpr int ballSpeed = 500;
 
-
-GameState mirrorize(const GameState& state) {
-    GameState mirror = state;
-    std::swap(mirror.playerPos, mirror.enemyPos);
-    mirror.ballPosX -= 2 * mirror.ballPosX - screenWidth;
-    mirror.ballPosY -= 2 * mirror.ballPosY - screenHeight;
-    mirror.ballVeloX *= -1;
-    mirror.ballVeloY *= -1;
-    return mirror;
-}
 
 Game::Game(const char* serverAddr)
 : serverAddr{serverAddr}
@@ -41,10 +31,11 @@ void Game::init() {
 }
 
 void Game::restart() {
+    const float minvx = ballSpeed / std::sqrt(2);
     state.ballPosX = screenWidth/2;
     state.ballPosY = screenHeight/2;
-    state.ballVeloX = RandFloat(0.3*ballSpeed) + 0.5*ballSpeed * RandSign();
-    state.ballVeloY = sqrt(ballSpeed*ballSpeed-state.ballVeloX*state.ballVeloX * RandSign());
+    state.ballVeloX = (minvx + RandFloat(0.8 * (ballSpeed - minvx))) * RandSign();
+    state.ballVeloY = std::sqrt(ballSpeed*ballSpeed-state.ballVeloX*state.ballVeloX) * RandSign();
     state.playerPos = screenHeight/2;
     state.enemyPos = screenHeight/2;
     prevUpdate = Clock::now();
@@ -92,12 +83,14 @@ void Game::update() {
     // goals
     if (state.ballPosX - ballRadius < paddleWidth) {
         state.playerScore += 1;
-        if (judge)
+        if (judge) {
             restart();
+        }
     } else if (state.ballPosX + ballRadius >= screenWidth) {
         state.enemyScore += 1;
-        if (judge)
+        if (judge) {
             restart();
+        }
     }
 
     state.ballPosX += state.ballVeloX * dt;
@@ -168,9 +161,10 @@ void Game::run() {
                     mnet = std::make_unique<net<GameState>>(qc->getBindPort(), qc->getPeer());
                     status = GameStatus::Waiting;
                     judge = qc->isJudge();
+                    if (judge)
+                            printf("I'm a judge!\n");
                     isReady = false;
                     qc.reset();
-                    restart();
                     break;
                 }
                 renderQueue();
@@ -193,6 +187,7 @@ void Game::run() {
 
                 if (isReady && mnet->isPeerReady()) {
                     status = GameStatus::Playing;
+                    restart();
                 }
 
                 renderWaiting();
@@ -204,14 +199,13 @@ void Game::run() {
 
                 mnet->send(state);
 
-                if (mnet->getPing() > 1000ms) {
+                if (mnet->getPing() > 500ms) {
                     printf("Lost connection to peer!\n");
                     status = GameStatus::Pending;
                     break;
                 }
 
                 update();
-                GameState mirror;
 
                 auto& mail = mnet->getMailbox();
                 if (mail.size() > 0) {
