@@ -2,8 +2,8 @@
 #define GAME_H
 
 #include <memory>
-#include "net.h"
 #include "queueclient.hpp"
+#include "net.h"
 
 struct GameState {
 	int playerPos;
@@ -20,6 +20,7 @@ enum class GameStatus
 {
 	Pending,
 	Queue,
+	Waiting,
 	Playing,
 };
 
@@ -33,6 +34,7 @@ private:
 	void restart();
 	void update();
 	void renderGame();
+	void renderWaiting();
 	void drawScore();
 	void drawPing();
 
@@ -43,6 +45,7 @@ private:
 	GameState state;
 	Clock::time_point prevUpdate;
 	GameStatus status = GameStatus::Pending;
+	bool isReady{false};
 };
 
 

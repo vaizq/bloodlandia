@@ -7,7 +7,7 @@
 #include <asio/placeholders.hpp>
 #include <chrono>
 #include <queue>
-#include "channel.h"
+#include "connection.h"
 #include "ping.h"
 
 
@@ -15,6 +15,8 @@ using udp = asio::ip::udp;
 
 
 constexpr Channel mailChannel = 69;
+constexpr Channel readyChannel = 70;
+
 
 template <typename Mail>
 class net 
@@ -34,11 +36,19 @@ public:
 				fprintf(stderr, "ERROR (mail) invalid number of bytes received\n");
 			}
 		});
+
+		connection.listen(readyChannel, [this](char* buf, size_t n) {
+			this->peerIsReady_ = true;
+		});
 	}
 
 	void send(const Mail& mail) 
 	{
 		connection.write(mailChannel, &mail, sizeof mail);
+	}
+
+	void setReady() {
+		connection.writeReliable(readyChannel, 0, 0);
 	}
 
 	Clock::duration getPing() {
@@ -49,6 +59,10 @@ public:
 		return mailbox;
 	}
 
+	bool isPeerReady() {
+		return peerIsReady_;
+	}
+
 	void poll() 
 	{
 		connection.poll();
@@ -57,6 +71,7 @@ private:
 	Connection connection;
 	std::queue<Mail> mailbox;
 	Ping ping;	
+	bool peerIsReady_{false};
 };
 
 #endif

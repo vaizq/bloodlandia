@@ -1,8 +1,12 @@
 #include "game.h"
 #include <chrono>
-#include "raylib.h"
 #include "util.h"
 #include <cstring>
+
+#undef Rectangle
+#undef CloseWindow
+#undef ShowCursor
+#include "raylib.h"
 
 
 using namespace std::chrono_literals;
@@ -108,8 +112,23 @@ void Game::drawScore() {
 
 void Game::drawPing() {
     char s[64];
-    std::snprintf(s, sizeof s, "ping %ld", std::chrono::duration_cast<std::chrono::milliseconds>(mnet->getPing()).count());
+    std::snprintf(s, sizeof s, "ping %.3fms", std::chrono::duration_cast<std::chrono::duration<float, std::milli>>(mnet->getPing()).count());
     DrawText(s, 10, 10, 16, WHITE); 
+}
+
+void renderQueue() {
+    BeginDrawing();
+    ClearBackground(BLACK);
+    DrawText("You are in a queue waiting for opponent...", 50, screenHeight/2, 24, WHITE); 
+    EndDrawing();
+}
+
+void Game::renderWaiting() {
+    const auto text = isReady ? "Waiting for opponent to be ready..." : "Press ENTER to start";
+    BeginDrawing();
+    ClearBackground(BLACK);
+    DrawText(text, 50, screenHeight/2, 24, WHITE); 
+    EndDrawing();
 }
 
 void Game::renderGame() {
@@ -120,13 +139,6 @@ void Game::renderGame() {
     DrawRectangle(0, state.enemyPos, paddleWidth, paddleHeight, WHITE);
     DrawRectangle(screenWidth - paddleWidth, state.playerPos, paddleWidth, paddleHeight, WHITE);
     DrawCircle(state.ballPosX, state.ballPosY, ballRadius, WHITE);
-    EndDrawing();
-}
-
-void renderQueue() {
-    BeginDrawing();
-    ClearBackground(BLACK);
-    DrawText("You are in a queue waiting for opponent...", 50, screenHeight/2, 24, WHITE); 
     EndDrawing();
 }
 
@@ -154,13 +166,36 @@ void Game::run() {
                            qc->getPeer().port(),
                            (qc->isJudge() ? " and your the judge!" : "!"));
                     mnet = std::make_unique<net<GameState>>(qc->getBindPort(), qc->getPeer());
-                    status = GameStatus::Playing;
+                    status = GameStatus::Waiting;
                     judge = qc->isJudge();
+                    isReady = false;
                     qc.reset();
                     restart();
                     break;
                 }
                 renderQueue();
+                break;
+        }
+        case GameStatus::Waiting:
+        {
+                mnet->poll();
+
+                if (mnet->getPing() > 1000ms) {
+                    printf("Lost connection to peer!\n");
+                    status = GameStatus::Pending;
+                    break;
+                }
+
+                if (!isReady && IsKeyPressed(KEY_ENTER)) {
+                    isReady = true;
+                    mnet->setReady();
+                }
+
+                if (isReady && mnet->isPeerReady()) {
+                    status = GameStatus::Playing;
+                }
+
+                renderWaiting();
                 break;
         }
         case GameStatus::Playing:

@@ -2,14 +2,14 @@
 #define PING_H
 
 #include <chrono>
-#include "channel.h"
+#include "connection.h"
 #include "util.h"
 
 
 using udp = asio::ip::udp;
 
 
-constexpr Channel pingChannel1 = 71;
+constexpr Channel pingChannel1 = 420;
 
 struct PingMessage {
 	uint32_t senderID;
