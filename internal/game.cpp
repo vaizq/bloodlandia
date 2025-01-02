@@ -3,10 +3,9 @@
 #include "util.h"
 #include <cstring>
 
-#undef Rectangle
-#undef CloseWindow
-#undef ShowCursor
-#include "raylib.h"
+namespace rl {
+    #include "raylib.h"
+}
 
 
 using namespace std::chrono_literals;
@@ -26,8 +25,8 @@ Game::Game(const char* serverAddr)
 {}
 
 void Game::init() {
-    InitWindow(screenWidth, screenHeight, "PongOnline");
-    SetTargetFPS(144);
+    rl::InitWindow(screenWidth, screenHeight, "PongOnline");
+    rl::SetTargetFPS(144);
 }
 
 void Game::restart() {
@@ -46,10 +45,10 @@ void Game::update() {
     const float dt = std::chrono::duration_cast<std::chrono::duration<float, std::chrono::seconds::period>>(now - prevUpdate).count();
     prevUpdate = now;
 
-    if (IsKeyDown(KEY_UP)) {
+    if (rl::IsKeyDown(rl::KEY_UP)) {
         state.playerPos -= dt * paddleSpeed;
     }
-    if (IsKeyDown(KEY_DOWN)) {
+    if (rl::IsKeyDown(rl::KEY_DOWN)) {
         state.playerPos += dt * paddleSpeed;
     }
 
@@ -100,53 +99,54 @@ void Game::update() {
 void Game::drawScore() {
     char s[64];
     std::snprintf(s, sizeof s, "%d : %d", state.enemyScore, state.playerScore);
-    DrawText(s, screenWidth/2 -18, 10, 24, WHITE); 
+    rl::DrawText(s, screenWidth/2 -18, 10, 24, rl::WHITE); 
 }
 
 void Game::drawPing() {
     char s[64];
     std::snprintf(s, sizeof s, "ping %.3fms", std::chrono::duration_cast<std::chrono::duration<float, std::milli>>(mnet->getPing()).count());
-    DrawText(s, 10, 10, 16, WHITE); 
+    rl::DrawText(s, 10, 10, 16, rl::WHITE); 
 }
 
 void renderQueue() {
-    BeginDrawing();
-    ClearBackground(BLACK);
-    DrawText("You are in a queue waiting for opponent...", 50, screenHeight/2, 24, WHITE); 
-    EndDrawing();
+    rl::BeginDrawing();
+    rl::ClearBackground(rl::BLACK);
+    rl::DrawText("You are in a queue waiting for opponent...", 50, screenHeight/2, 24, rl::WHITE); 
+    rl::EndDrawing();
 }
 
 void Game::renderWaiting() {
     const auto text = isReady ? "Waiting for opponent to be ready..." : "Press ENTER to start";
-    BeginDrawing();
-    ClearBackground(BLACK);
-    DrawText(text, 50, screenHeight/2, 24, WHITE); 
-    EndDrawing();
+    rl::BeginDrawing();
+    rl::ClearBackground(rl::BLACK);
+    rl::DrawText(text, 50, screenHeight/2, 24, rl::WHITE); 
+    rl::EndDrawing();
 }
 
 void Game::renderGame() {
-    BeginDrawing();
-    ClearBackground(BLACK);
+    rl::BeginDrawing();
+    rl::ClearBackground(rl::BLACK);
     drawPing();
     drawScore();
-    DrawRectangle(0, state.enemyPos, paddleWidth, paddleHeight, WHITE);
-    DrawRectangle(screenWidth - paddleWidth, state.playerPos, paddleWidth, paddleHeight, WHITE);
-    DrawCircle(state.ballPosX, state.ballPosY, ballRadius, WHITE);
-    EndDrawing();
+    rl::DrawRectangle(0, state.enemyPos, paddleWidth, paddleHeight, rl::WHITE);
+    rl::DrawRectangle(screenWidth - paddleWidth, state.playerPos, paddleWidth, paddleHeight, rl::WHITE);
+    rl::DrawCircle(state.ballPosX, state.ballPosY, ballRadius, rl::WHITE);
+    rl::EndDrawing();
 }
 
 void Game::run() {
 
     init();
-    while (!WindowShouldClose()) {
+    while (!rl::WindowShouldClose()) {
         switch (status) {
         case GameStatus::Pending:
         {
-                BeginDrawing();
-                ClearBackground(BLACK);
-                EndDrawing();
+                rl::BeginDrawing();
+                rl::ClearBackground(rl::BLACK);
+                rl::EndDrawing();
                 qc = std::make_unique<QueueClient>(serverAddr, "6969");
                 qc->start();
+                printf("client started\n");
                 status = GameStatus::Queue;
                 break;
         }
@@ -180,7 +180,7 @@ void Game::run() {
                     break;
                 }
 
-                if (!isReady && IsKeyPressed(KEY_ENTER)) {
+                if (!isReady && rl::IsKeyPressed(rl::KEY_ENTER)) {
                     isReady = true;
                     mnet->setReady();
                 }
@@ -232,5 +232,7 @@ void Game::run() {
         }
     }
 
-    CloseWindow();
+    printf("closing, bye!\n");
+
+    rl::CloseWindow();
 }
