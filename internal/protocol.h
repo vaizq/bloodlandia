@@ -16,18 +16,26 @@ enum class Event : uint8_t {
 	Update
 };
 
-struct Move {
-	rl::Vector2 velo;
-};
-
-struct Shoot {
-	rl::Vector2 direction;
+enum class MessageType : uint8_t {
+	Unreliable,
+	Reliable,
+	Confirmation
 };
 
 struct Header {
 	Event event;
 	ID playerId;
 	uint64_t payloadSize;
+	ID messageId{0};
+	MessageType type{MessageType::Unreliable};
+};
+
+struct Move {
+	rl::Vector2 velo;
+};
+
+struct Shoot {
+	rl::Vector2 direction;
 };
 
 struct Player {
@@ -37,7 +45,7 @@ struct Player {
 };
 
 struct GameState {
-	Player players[128];
+	Player players[64];
 	uint64_t numPlayers;
 };
 

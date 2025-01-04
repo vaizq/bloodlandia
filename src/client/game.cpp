@@ -78,6 +78,34 @@ void Game::startReceive() {
                 return;
             }
 
+            switch (h.type) {
+                case proto::MessageType::Reliable:
+                {
+                    // send confirmation back
+                    proto::Header confh{h.event, h.playerId, 0, h.messageId, proto::MessageType::Confirmation};
+                    char* buf = new char[sizeof confh];
+                    std::memcpy(buf, &confh, sizeof confh);
+                    socket.async_send_to(
+                        asio::buffer(buf, sizeof confh),
+                        peer,
+                        [buf](std::error_code ec, size_t n) {
+                                if (ec) {
+                                    fprintf(stderr, "ERROR: failed to send confirmation: %s\n", ec.message().c_str());
+                                }
+                                delete[] buf;
+                        });
+                    break;
+                }
+                case proto::MessageType::Confirmation:
+                    if (waitingForConfirmation.erase(h.messageId) != 0) {
+                        printf("INFO: Got confirmation for %d\n", h.messageId);
+                    }
+                    startReceive();
+                    return;
+                case proto::MessageType::Unreliable:
+                    break;
+            }
+
             switch (h.event) {
                 case proto::Event::Update:
                 {
@@ -133,28 +161,47 @@ void Game::update() {
     prevUpdate = now;
 
     const auto prevVelo = player.velo;
+
     if (rl::IsKeyPressed(rl::KEY_A)) {
         player.velo.x = -playerSpeed;
     } else if (rl::IsKeyReleased(rl::KEY_A)) {
-        player.velo.x = 0;
+        if (rl::IsKeyDown(rl::KEY_D)) {
+            player.velo.x = playerSpeed;
+        } else {
+            player.velo.x = 0;
+        }
     }
 
     if (rl::IsKeyPressed(rl::KEY_D)) {
         player.velo.x = playerSpeed;
     } else if (rl::IsKeyReleased(rl::KEY_D)) {
-        player.velo.x = 0;
+        if (rl::IsKeyDown(rl::KEY_A)) {
+            player.velo.x = -playerSpeed;
+        } else {
+            player.velo.x = 0;
+        }
+
     }
 
     if (rl::IsKeyPressed(rl::KEY_W)) {
         player.velo.y = -playerSpeed;
     } else if (rl::IsKeyReleased(rl::KEY_W)) {
-        player.velo.y = 0;
+        if (rl::IsKeyDown(rl::KEY_S)) {
+            player.velo.y = playerSpeed;
+        } else {
+            player.velo.y = 0;
+        }
+
     }
 
     if (rl::IsKeyPressed(rl::KEY_S)) {
         player.velo.y = playerSpeed;
     } else if (rl::IsKeyReleased(rl::KEY_S)) {
-        player.velo.y = 0;
+        if (rl::IsKeyDown(rl::KEY_W)) {
+            player.velo.y = -playerSpeed;
+        } else {
+            player.velo.y = 0;
+        }
     }
 
     if (rl::IsMouseButtonPressed(rl::MOUSE_BUTTON_LEFT)) {
@@ -222,7 +269,10 @@ void Game::run() {
 
 void Game::eventMove() {
     proto::Move move{player.velo};
-    auto [bufOut, n] = proto::makeMessage({proto::Event::Move, player.id, sizeof move}, &move);
+    proto::Header h{proto::Event::Move, player.id, sizeof move, nextID(), proto::MessageType::Reliable};
+    auto [bufOut, n] = proto::makeMessage(h, &move);
+
+    waitingForConfirmation[h.messageId] = Message{h, {(char*)&move, (char*)&move + sizeof move}};
 
     socket.async_send_to(
             asio::buffer(bufOut, n),
@@ -238,7 +288,10 @@ void Game::eventMove() {
 
 void Game::eventShoot() {
     proto::Shoot shoot{player.target - player.pos};
-    auto [bufOut, n] = proto::makeMessage({proto::Event::Shoot, player.id, sizeof shoot}, &shoot);
+    auto [bufOut, n] = proto::makeMessage(
+        {proto::Event::Shoot, player.id, sizeof shoot}, 
+        &shoot
+    );
 
     socket.async_send_to(
             asio::buffer(bufOut, n),
@@ -250,4 +303,9 @@ void Game::eventShoot() {
                 delete[] bufOut;
             }
     );
+}
+
+proto::ID Game::nextID() {
+    static proto::ID id{420};
+    return id++;
 }

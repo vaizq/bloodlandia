@@ -17,11 +17,25 @@ static proto::ID nextID() {
     return id++;
 }
 
-std::map<udp::endpoint, proto::ID> playerIds;
+struct EndpointInfo {
+    proto::ID playerId;
+    proto::ID latestMessageId;
+};
+
+std::map<udp::endpoint, EndpointInfo> epInfos;
 proto::GameState state;
 int tickrate;
 
-void handleDatagram(proto::ID playerID, char* data, size_t n) {
+asio::awaitable<void> confirm(udp::socket& socket, proto::Header header, udp::endpoint ep) {
+        char buf[sizeof header];
+        std::memcpy(buf, &header, sizeof header);
+        co_await socket.async_send_to(
+                        asio::buffer(buf, sizeof buf),
+                        ep,
+                        asio::use_awaitable);
+}
+
+void handleDatagram(udp::socket& socket, const udp::endpoint& endpoint, char* data, size_t n) {
     if (n < sizeof (proto::Header)) {
         fprintf(stderr, "ERROR: datagramsize < sizeof header\n");
         return;
@@ -43,6 +57,20 @@ void handleDatagram(proto::ID playerID, char* data, size_t n) {
     if (it == end) {
         fprintf(stderr, "ERROR: No player with ID=%d in state!\n", h.playerId);
         return;
+    }
+
+    if (h.type == proto::MessageType::Reliable) {
+        asio::co_spawn(
+            socket.get_executor(), 
+            confirm(socket, proto::Header{h.event, h.playerId, 0, h.messageId, proto::MessageType::Confirmation}, endpoint),
+            asio::detached);
+
+        if (h.messageId < epInfos[endpoint].latestMessageId) {
+            printf("INFO: received old message (id %d)\n", h.messageId);
+            return;
+        } else {
+            epInfos[endpoint].latestMessageId = h.messageId;
+        }
     }
 
     proto::Player& player = *it;
@@ -91,14 +119,14 @@ asio::awaitable<void> listen(udp::socket& socket) {
             asio::use_awaitable
         );
 
-        if (!playerIds.contains(peer)) {
+        if (!epInfos.contains(peer)) {
             printf("New connection!\n");
             const auto id = nextID();
-            playerIds[peer] = id;
+            epInfos[peer] = {id, 0};
             state.players[state.numPlayers++].id = id;
-            handleDatagram(id, buf, n);
+            handleDatagram(socket, peer, buf, n);
         } else {
-            handleDatagram(playerIds[peer], buf, n);
+            handleDatagram(socket, peer, buf, n);
         }
     }
 }
@@ -132,8 +160,8 @@ asio::awaitable<void> update(udp::socket& socket) {
             player.pos = player.pos + dt * player.velo;
         }
 
-        for (const auto& [ep, id] : playerIds) {
-            co_await sendUpdate(socket, ep, id);
+        for (const auto& [ep, epInfo] : epInfos) {
+            co_await sendUpdate(socket, ep, epInfo.playerId);
         }
     }
 }

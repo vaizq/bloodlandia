@@ -5,6 +5,7 @@
 #include "rl.h"
 #include <vector>
 #include <asio.hpp>
+#include <map>
 #include "protocol.h"
 
 using udp = asio::ip::udp;
@@ -21,6 +22,11 @@ struct Enemy {
 	rl::Vector2 velo;
 };
 
+struct Message {
+	proto::Header header;
+	std::vector<char> payload;
+};
+
 class Game {
 	using Clock = std::chrono::high_resolution_clock;
 public:
@@ -32,6 +38,7 @@ private:
 	void render();
 	void startReceive();
 
+	proto::ID nextID();
 	void eventMove();
 	void eventShoot();
 
@@ -46,6 +53,7 @@ private:
 	udp::socket socket;
 	const udp::endpoint server;
 	udp::endpoint peer;
+	std::map<proto::ID, Message> waitingForConfirmation;
 
 	char buf[4048];
 };
