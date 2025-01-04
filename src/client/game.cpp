@@ -41,7 +41,7 @@ rl::Vector2 Game::screenCoordToWorldPos(rl::Vector2 coord) {
 
 Game::Game(const char* serverAddr)
 :   socket{ioc, udp::v4()},
-    server{udp::v4(), 6969}
+    server{udp::resolver{ioc}.resolve(serverAddr, "6969")->endpoint()}
 {
     printf("server: %s:%d\n", server.address().to_string().c_str(), server.port());
     printf("local: %s:%d\n", 
@@ -82,14 +82,12 @@ void Game::startReceive() {
                 case proto::Event::Update:
                 {
                     if (sizeof (proto::GameState) != h.payloadSize) {
-                        printf("ERROR: invalid payload size for Update\n");
+                        fprintf(stderr, "ERROR: invalid payload size for Update\n");
                         return;
                     }
 
                     proto::GameState state;
                     std::memcpy(&state, buf + sizeof (proto::Header), h.payloadSize);
-
-                    printf("received update for %ld players\n", state.numPlayers);
 
                     enemies.clear();
                     for (int i = 0; i < state.numPlayers; ++i) {
@@ -101,6 +99,7 @@ void Game::startReceive() {
                             player.velo = p.velo;
                         }
                     }
+                    prevServerUpdate = Clock::now();
                     break;
                 }
                 default:
@@ -161,18 +160,20 @@ void Game::update() {
     if (rl::IsMouseButtonPressed(rl::MOUSE_BUTTON_LEFT)) {
         const auto target = rl::GetMousePosition();
         const auto direction = {target - player.pos};
-        printf("shoot!\n");
         eventShoot();
     }
 
     if (player.velo.x != prevVelo.x || player.velo.y != prevVelo.y) {
-        printf("move!\n");
         eventMove();
     }
 
     viewHeight += 5.f * rl::GetMouseWheelMove();
 
     player.pos = player.pos + dt * player.velo;
+
+    for (auto& enemy : enemies) {
+        enemy.pos = enemy.pos + dt * enemy.velo;
+    }
 
     ioc.poll();
 }

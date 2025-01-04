@@ -19,6 +19,7 @@ static proto::ID nextID() {
 
 std::map<udp::endpoint, proto::ID> playerIds;
 proto::GameState state;
+int tickrate;
 
 void handleDatagram(proto::ID playerID, char* data, size_t n) {
     if (n < sizeof (proto::Header)) {
@@ -120,7 +121,7 @@ asio::awaitable<void> sendUpdate(udp::socket& socket, const udp::endpoint& endpo
 
 asio::awaitable<void> update(udp::socket& socket) {
     asio::high_resolution_timer timer{socket.get_executor()};
-    constexpr std::chrono::milliseconds interval{100};
+    const std::chrono::milliseconds interval{static_cast<long>(1000.f / tickrate)};
     for (;;) {
         co_await timer.async_wait(asio::use_awaitable);
         timer.expires_after(interval);
@@ -139,12 +140,13 @@ asio::awaitable<void> update(udp::socket& socket) {
 
 int main(int argc, char** argv) 
 {
-    if (argc != 2) {
-        printf("usage: app port\n");
+    if (argc != 3) {
+        printf("usage: app port tickrate\n");
         return -1;
     }
 
     unsigned short port = std::atoi(argv[1]);
+    tickrate = std::atoi(argv[2]);
 
     asio::io_context ioc;
     udp::socket socket{ioc, udp::endpoint{udp::v4(), port}};
@@ -154,6 +156,7 @@ int main(int argc, char** argv)
 
     const auto ep = socket.local_endpoint();
     printf("listeing on %s:%d\n", ep.address().to_string().c_str(), ep.port());
+    printf("tickrate %d\n", tickrate);
 
     ioc.run();
 
