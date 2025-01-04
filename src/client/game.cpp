@@ -4,6 +4,7 @@
 #include <raylib.h>
 #include "util.h"
 #include <format>
+#include "protocol.h"
 
 using namespace std::chrono_literals;
 
@@ -39,23 +40,89 @@ rl::Vector2 Game::screenCoordToWorldPos(rl::Vector2 coord) {
 }
 
 Game::Game(const char* serverAddr)
-{}
+:   socket{ioc, udp::v4()},
+    server{udp::v4(), 6969}
+{
+    printf("server: %s:%d\n", server.address().to_string().c_str(), server.port());
+    printf("local: %s:%d\n", 
+           socket.local_endpoint().address().to_string().c_str(), 
+           socket.local_endpoint().port());
+    startReceive();
+}
+
+void Game::startReceive() {
+    socket.async_receive_from(
+        asio::buffer(buf, sizeof buf),
+        peer,
+        [this](std::error_code ec, size_t n) {
+            if (ec) {
+                fprintf(stderr, "ERROR: failed to receive_from: %s\n", ec.message().c_str());
+                startReceive();
+                return;
+            }
+
+            if (n < sizeof (proto::Header)) {
+                fprintf(stderr, "ERROR: received less bytes than header\n");
+                startReceive();
+                return;
+            }
+
+            proto::Header h;
+            std::memcpy(&h, buf, sizeof h);
+            player.id = h.playerId;
+
+            if(sizeof h + h.payloadSize != n) {
+                fprintf(stderr, "ERROR: received invalid number of bytes %ld when should have been %ld. PayloadSize: %ld\n",
+                        n, sizeof h + h.payloadSize, h.payloadSize);
+                startReceive();
+                return;
+            }
+
+            switch (h.event) {
+                case proto::Event::Update:
+                {
+                    if (sizeof (proto::GameState) != h.payloadSize) {
+                        printf("ERROR: invalid payload size for Update\n");
+                        return;
+                    }
+
+                    proto::GameState state;
+                    std::memcpy(&state, buf + sizeof (proto::Header), h.payloadSize);
+
+                    printf("received update for %ld players\n", state.numPlayers);
+
+                    enemies.clear();
+                    for (int i = 0; i < state.numPlayers; ++i) {
+                        const auto& p = state.players[i];
+                        if (p.id != player.id) {
+                            enemies.emplace_back(p.pos, p.velo);
+                        } else {
+                            player.pos = p.pos;
+                            player.velo = p.velo;
+                        }
+                    }
+                    break;
+                }
+                default:
+                    fprintf(stderr, "ERROR: invalid event %d\n", static_cast<int>(h.event));
+            }
+
+            startReceive();
+        });
+}
 
 void Game::init() {
     rl::InitWindow(renderWidth, renderHeight, "Verilandia");
     rl::SetTargetFPS(144);
     rl::HideCursor();
 
+    // connect()
+
     prevUpdate = Clock::now();
     player.pos.x = 0;
     player.pos.y = 0;
-
-    for (int i = 0; i < 10; ++i) {
-        enemies.emplace_back(
-            rl::Vector2{RandFloat(100) - 50, RandFloat(200) - 100},
-            rl::Vector2{RandFloat(10) - 5, RandFloat(10) - 5}
-        );
-    }
+    player.velo.x = 0;
+    player.velo.y = 0;
 }
 
 void Game::update() {
@@ -66,26 +133,48 @@ void Game::update() {
     const float dt = std::chrono::duration_cast<std::chrono::duration<float, std::chrono::seconds::period>>(now - prevUpdate).count();
     prevUpdate = now;
 
-    if (rl::IsKeyDown(rl::KEY_A)) {
-        player.pos.x -= dt * playerSpeed;
+    const auto prevVelo = player.velo;
+    if (rl::IsKeyPressed(rl::KEY_A)) {
+        player.velo.x = -playerSpeed;
+    } else if (rl::IsKeyReleased(rl::KEY_A)) {
+        player.velo.x = 0;
     }
-    if (rl::IsKeyDown(rl::KEY_D)) {
-        player.pos.x += dt * playerSpeed;
+
+    if (rl::IsKeyPressed(rl::KEY_D)) {
+        player.velo.x = playerSpeed;
+    } else if (rl::IsKeyReleased(rl::KEY_D)) {
+        player.velo.x = 0;
     }
-    if (rl::IsKeyDown(rl::KEY_W)) {
-        player.pos.y -= dt * playerSpeed;
+
+    if (rl::IsKeyPressed(rl::KEY_W)) {
+        player.velo.y = -playerSpeed;
+    } else if (rl::IsKeyReleased(rl::KEY_W)) {
+        player.velo.y = 0;
     }
-    if (rl::IsKeyDown(rl::KEY_S)) {
-        player.pos.y += dt * playerSpeed;
+
+    if (rl::IsKeyPressed(rl::KEY_S)) {
+        player.velo.y = playerSpeed;
+    } else if (rl::IsKeyReleased(rl::KEY_S)) {
+        player.velo.y = 0;
     }
 
     if (rl::IsMouseButtonPressed(rl::MOUSE_BUTTON_LEFT)) {
+        const auto target = rl::GetMousePosition();
+        const auto direction = {target - player.pos};
         printf("shoot!\n");
+        eventShoot();
+    }
+
+    if (player.velo.x != prevVelo.x || player.velo.y != prevVelo.y) {
+        printf("move!\n");
+        eventMove();
     }
 
     viewHeight += 5.f * rl::GetMouseWheelMove();
 
-    // Check for network events
+    player.pos = player.pos + dt * player.velo;
+
+    ioc.poll();
 }
 
 void Game::render() {
@@ -128,4 +217,36 @@ void Game::run() {
     }
 
     rl::CloseWindow();
+}
+
+void Game::eventMove() {
+    proto::Move move{player.velo};
+    auto [bufOut, n] = proto::makeMessage({proto::Event::Move, player.id, sizeof move}, &move);
+
+    socket.async_send_to(
+            asio::buffer(bufOut, n),
+            server,
+            [bufOut](std::error_code ec, size_t n) {
+                if (ec) {
+                    fprintf(stderr, "ERROR: failed to send move event!: %s\n", ec.message().c_str());
+                }
+                delete[] bufOut;
+            }
+    );
+}
+
+void Game::eventShoot() {
+    proto::Shoot shoot{player.target - player.pos};
+    auto [bufOut, n] = proto::makeMessage({proto::Event::Shoot, player.id, sizeof shoot}, &shoot);
+
+    socket.async_send_to(
+            asio::buffer(bufOut, n),
+            server,
+            [bufOut](std::error_code ec, size_t n) {
+                if (ec) {
+                    fprintf(stderr, "ERROR: failed to send shoot event!: %s\n", ec.message().c_str());
+                }
+                delete[] bufOut;
+            }
+    );
 }

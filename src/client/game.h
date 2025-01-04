@@ -4,9 +4,15 @@
 #include <chrono>
 #include "rl.h"
 #include <vector>
+#include <asio.hpp>
+#include "protocol.h"
+
+using udp = asio::ip::udp;
 
 struct Player {
+	proto::ID id;
 	rl::Vector2 pos;
+	rl::Vector2 velo;
 	rl::Vector2 target;
 };
 
@@ -24,6 +30,10 @@ private:
 	void init();
 	void update();
 	void render();
+	void startReceive();
+
+	void eventMove();
+	void eventShoot();
 
 	rl::Vector2 worldPosToScreenCoord(rl::Vector2 pos);
 	rl::Vector2 screenCoordToWorldPos(rl::Vector2 coord);
@@ -31,6 +41,12 @@ private:
 	Clock::time_point prevUpdate;
 	Player player;
 	std::vector<Enemy> enemies;
+	asio::io_context ioc;
+	udp::socket socket;
+	const udp::endpoint server;
+	udp::endpoint peer;
+
+	char buf[4048];
 };
 
 

@@ -2,33 +2,53 @@
 #define PROTOCOL_H
 
 #include <cstdint>
-#include <string>
+#include <memory>
 #include <cstring>
+#include "rl.h"
 
 namespace proto {
 
-enum class PayloadType : uint32_t {
-	ConnectInfo
+using ID = uint32_t;
+
+enum class Event : uint8_t {
+	Move,
+	Shoot,
+	Update
+};
+
+struct Move {
+	rl::Vector2 velo;
+};
+
+struct Shoot {
+	rl::Vector2 direction;
 };
 
 struct Header {
-	PayloadType payloadType;
+	Event event;
+	ID playerId;
 	uint64_t payloadSize;
 };
 
-struct ConnectInfo {
-	ConnectInfo() = default;
-	ConnectInfo(uint32_t bindPort, const std::string& peerAddr, uint32_t peerPort, bool isJudge=false)
-	: bindPort{bindPort}, peerPort{peerPort}, isJudge{isJudge}
-	{
-		std::memset(peerAddress, 0, sizeof peerAddress);
-		std::memcpy(peerAddress, peerAddr.c_str(), peerAddr.size());
-	}
-	uint32_t bindPort;
-	char peerAddress[128];
-	uint32_t peerPort;
-	bool isJudge{false};
+struct Player {
+	ID id;
+	rl::Vector2 pos{0, 0};
+	rl::Vector2 velo{0, 0};
 };
+
+struct GameState {
+	Player players[128];
+	uint64_t numPlayers;
+};
+
+static std::pair<char*, size_t> makeMessage(Header header, const void* data) {
+	const size_t n = sizeof header + header.payloadSize;
+	char* buf = new char[n];
+
+	std::memcpy(buf, &header, sizeof header);
+	std::memcpy(buf + sizeof header, data, header.payloadSize);
+	return {buf, n};
+}
 
 }
 
