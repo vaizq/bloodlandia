@@ -5,7 +5,6 @@
 #include <chrono>
 #include <map>
 #include <functional>
-#include <queue>
 #include <vector>
 #include <format>
 
@@ -47,13 +46,12 @@ class Connection {
 public:
 	using Listener = std::function<void(char*, size_t)>;
 
-	Connection(udp::endpoint peer, unsigned short bindPort)
-	: socket{ioc, udp::endpoint{udp::v4(), bindPort}},
+	Connection(udp::socket& socket, udp::endpoint peer)
+	: socket{socket},
 	  peer{std::move(peer)},
-	  timer{ioc}
+	  timer{socket.get_executor()}
 	{
-		startReceive();
-		startSendReliable();
+		start();
 	}
 
 	void write(Channel channel, const void* data, size_t dataLen, Handler handler = [](std::error_code, size_t){}) {
@@ -61,7 +59,6 @@ public:
 		send(
 			Header{channel, (uint32_t)dataLen, Header::Type::Unreliable, ++id}, 
 			data, 
-			dataLen, 
 			handler
 		);
 	}
@@ -78,30 +75,32 @@ public:
 		send(msg);
 	}
 
+	const udp::endpoint& getPeer() {
+		return peer;
+	}
+
 	void listen(Channel channel, Listener listener) {
 		listeners[channel] = listener;
 	}
 
-	void poll() {
-		ioc.poll();
-	}
-
-	asio::io_context& get_executor() {
-		return ioc;
+	void start() {
+		startReceive();
+		startSendReliable();
 	}
 
 private:
-	void send(const Header& h, const void* data = nullptr, size_t dataLen = 0, Handler handler = [](std::error_code, size_t){}) {
-		char buf[sizeof h + dataLen];
-		std::memcpy(buf, &h, sizeof h);
-		if (dataLen > 0) {
-			std::memcpy(buf + sizeof h, data, dataLen);
+	void send(const Header& h, const void* data = nullptr, Handler handler = [](std::error_code, size_t){}) {
+		const size_t totalSize = sizeof h + h.payloadSize;
+		auto buf = std::make_unique<char[]>(totalSize);
+		std::memcpy(buf.get(), &h, sizeof h);
+		if (h.payloadSize > 0) {
+			std::memcpy(buf.get() + sizeof h, data, h.payloadSize);
 		}
 
 		socket.async_send_to(
-			asio::buffer(buf, sizeof buf),
+			asio::buffer(buf.get(), totalSize),
 			peer,
-			[handler](std::error_code ec, size_t n) {
+			[handler, buf=std::move(buf)](std::error_code ec, size_t n) {
 				handler(ec, n);
 				if (ec) {
 					fprintf(stderr, "ERROR Connection::write: %s\n", ec.message().c_str());
@@ -190,18 +189,18 @@ private:
 			send(Header{h.channel, 0, Header::Type::Confirmation, h.id});
 			break;
 		case Header::Type::Confirmation:
-			waitingForConfirmation.erase(h.id);
+			if (waitingForConfirmation.erase(h.id) == 0) {
+				fprintf(stderr, "ERROR: received confirmation for message %d that is not waiting to be confirmed\n", h.id);
+			}
 			break;
 		}
 	}
 
-	asio::io_context ioc;
-	udp::socket socket;
+	udp::socket& socket;
 	udp::endpoint peer;
 	std::map<Channel, Listener> listeners;
 	char buf[2048];
 	std::map<uint32_t, Message> waitingForConfirmation;
-	std::queue<Message> reliableQueue;
 	asio::high_resolution_timer timer;
 };
 

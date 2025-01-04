@@ -5,10 +5,13 @@ cmake_minimum_required(VERSION 3.10)
 project(PongOnline)
 
 # Set the C++ standard to C++20
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -static-libgcc -static-libstdc++ -static")
+
+if (WIN32)
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -static-libgcc -static-libstdc++ -static")
+endif()
 
 # Optionally set build type to Release
 #set(CMAKE_BUILD_TYPE Release)
@@ -17,7 +20,7 @@ Include(FetchContent)
 
 # Add Raylib package
 # Find Raylib if it's installed
-# find_package(raylib REQUIRED)
+find_package(raylib REQUIRED)
 if (NOT raylib_FOUND) # If there's none, fetch and build raylib
   FetchContent_Declare(
     raylib
@@ -32,10 +35,10 @@ if (NOT raylib_FOUND) # If there's none, fetch and build raylib
   endif()
 endif()
 
-set(COMMON_SOURCES internal/game.cpp)
+set(COMMON_SOURCES )
 
 # Add source files for client and server
-add_executable(client src/client/main.cpp ${COMMON_SOURCES})
+add_executable(client src/client/main.cpp src/client/game.cpp ${COMMON_SOURCES})
 
 target_include_directories(client PRIVATE internal /usr/local/include/)
 
