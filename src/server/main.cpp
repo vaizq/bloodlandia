@@ -106,7 +106,7 @@ int main(int argc, char** argv)
         try {
             const auto [h, shoot] = parseMessage<proto::Shoot>(ep, data, n);
             proto::Player& p = findPlayer(h.playerId);
-            printf("player %d shoot (%.2f, %.2f)\n", p.id, shoot.direction.x, shoot.direction.y);
+            printf("player %d shoot target is (%.1f, %.1f)\n", p.id, shoot.target.x, shoot.target.y);
         } catch(const std::exception& e) {
             fprintf(stderr, "%s\n", e.what());
         }

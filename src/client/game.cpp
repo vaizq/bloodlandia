@@ -184,6 +184,7 @@ void Game::render() {
     {
         const auto pos = rl::GetMousePosition();
         const auto wpos = screenCoordToWorldPos(pos);
+        player.target = wpos;
         const float w = 20.0f;
         rl::DrawLine(pos.x - w/2, pos.y, pos.x + w/2, pos.y, rl::GREEN);
         rl::DrawLine(pos.x, pos.y - w/2, pos.x, pos.y + w/2, rl::GREEN);
@@ -217,7 +218,7 @@ void Game::eventMove() {
 }
 
 void Game::eventShoot() {
-    proto::Shoot shoot{player.target - player.pos};
+    proto::Shoot shoot{player.target};
     auto [bufOut, n] = proto::makeMessage(
         {player.id, sizeof shoot}, 
         &shoot
@@ -227,3 +228,11 @@ void Game::eventShoot() {
         delete[] bufOut;
     });
 }
+
+
+
+
+
+
+
+

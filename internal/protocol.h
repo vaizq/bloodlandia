@@ -26,7 +26,7 @@ struct Move {
 };
 
 struct Shoot {
-	rl::Vector2 direction;
+	rl::Vector2 target;
 };
 
 struct Player {
