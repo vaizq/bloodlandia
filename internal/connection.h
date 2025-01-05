@@ -21,7 +21,8 @@ struct Header {
 	enum class Type {
 		Unreliable,
 		Reliable,
-		Confirmation
+		Confirmation,
+		Ping
 	};
 	Channel channel;
 	uint64_t payloadSize;
@@ -37,6 +38,8 @@ struct Header {
 	}
 };
 
+static constexpr Channel pingChannel{1};
+static constexpr Channel openChannelStart{69};
 
 class Connection {
 
@@ -80,6 +83,10 @@ public:
 		};
 
 		send(msg);
+	}
+
+	Clock::duration getPing() const {
+		return ping;
 	}
 
 	void listen(Channel channel, Listener listener) {
@@ -205,6 +212,10 @@ private:
 				fprintf(stderr, "ERROR: received confirmation for message %d that is not waiting to be confirmed\n", h.id);
 			}
 			break;
+		case Header::Type::Ping:
+			std::memcpy(&ping, buf + sizeof h, sizeof ping);
+			send(Header{h.channel, 0, Header::Type::Ping, h.id});
+			break;
 		}
 	}
 
@@ -216,6 +227,7 @@ private:
 	std::map<uint32_t, Message> waitingForConfirmation;
 	asio::high_resolution_timer timer;
 	bool isConnected_{false};
+	Clock::duration ping{0};
 };
 
 

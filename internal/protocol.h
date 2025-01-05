@@ -16,9 +16,11 @@ constexpr float bulletSpeed = 100.0f;
 constexpr float playerRadius = 1.f;
 constexpr float enemyRadius = 1.f;
 constexpr float bulletRadius = 0.1f;
-constexpr Channel moveChannel = 1;
-constexpr Channel shootChannel = 2;
-constexpr Channel updateChannel = 3;
+
+constexpr Channel moveChannel = openChannelStart + 1;
+constexpr Channel shootChannel = openChannelStart + 2;
+constexpr Channel updateChannel = openChannelStart + 3;
+constexpr Channel pingChannel = openChannelStart + 4;
 
 struct Header {
 	ID playerId;

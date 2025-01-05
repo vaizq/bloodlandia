@@ -31,12 +31,17 @@ class Server {
 
 	struct PeerInfo {
 		std::map<Channel, ChannelInfo> chInfo;
+		Clock::duration ping{0};
+		Clock::time_point prevPing{Clock::now()};
+		uint32_t prevPingID{0};
+		uint32_t prevReceivedPingID{0};
 	};
 
 public:
 	using Listener = std::function<void(const udp::endpoint& ep, char* data, size_t datalen)>;
 	Server(unsigned short port)
-	: socket{ioc, udp::endpoint{udp::v4(), port}}
+	: socket{ioc, udp::endpoint{udp::v4(), port}},
+	  pingTimer{ioc}
 	{
 		start();
 	}
@@ -101,6 +106,7 @@ private:
 
 	void start() {
 		receive();
+		ping();
 	}
 
 	void receive() {
@@ -134,8 +140,25 @@ private:
 		});
 	}
 
+	void ping() {
+		pingTimer.expires_after(pingInterval);
+		pingTimer.async_wait([this](std::error_code ec) {
+			if (ec) {
+				fprintf(stderr, "ERROR\t %s\n", ec.message().c_str());
+				ping();
+			}
+
+			for (auto& [peer, info] : peers) {
+				send({pingChannel, sizeof info.ping, Header::Type::Ping, ++info.prevPingID},
+				     {peer, {(const char*)&info.ping, (const char*)&info.ping + sizeof info.ping}});
+				info.prevPing = Clock::now();
+			}
+			ping();
+		});
+	}
+
 	void handleMessage(Header h) {
-		if (!listeners.contains(h.channel)) {
+		if (h.channel != pingChannel && !listeners.contains(h.channel)) {
 			fprintf(stderr, "ERROR: no listener for channel %d\n", h.channel);
 			return;
 		}
@@ -177,6 +200,14 @@ private:
 					printf("INFO\t message ch: %d id: %d confirmed\n", h.channel, h.id);
 				}
 				return;
+			case Header::Type::Ping:
+				auto& info = peers[peer];
+				if (h.id > info.prevReceivedPingID) {
+					const auto now = Clock::now();
+					info.ping = now - info.prevPing + pingInterval * (info.prevPingID - h.id);
+					info.prevReceivedPingID = h.id;
+				}
+				return;
 		}
 
 		listeners[h.channel](peer, bufIn + sizeof h, h.payloadSize);
@@ -188,6 +219,8 @@ private:
 	std::map<Channel, Listener> listeners;
 	char bufIn[10000];
 	udp::endpoint peer;
+	asio::high_resolution_timer pingTimer;
+	static constexpr std::chrono::milliseconds pingInterval{1000};
 };
 
 #endif

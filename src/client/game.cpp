@@ -214,6 +214,11 @@ void Game::render() {
         }
     }
 
+    {
+        const float ping = std::chrono::duration_cast<std::chrono::duration<float, std::milli>>(con.getPing()).count();
+        rl::DrawText(std::format("ping {:.3f}ms", ping).c_str(), 10, 10, 16, rl::WHITE);
+    }
+
     rl::EndDrawing();
 }
 
