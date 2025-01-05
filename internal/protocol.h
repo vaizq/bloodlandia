@@ -5,29 +5,20 @@
 #include <memory>
 #include <cstring>
 #include "rl.h"
+#include "connection.h"
 
 namespace proto {
 
 using ID = uint32_t;
 
-enum class Event : uint8_t {
-	Move,
-	Shoot,
-	Update
-};
+constexpr Channel moveChannel = 1;
+constexpr Channel shootChannel = 2;
+constexpr Channel updateChannel = 3;
 
-enum class MessageType : uint8_t {
-	Unreliable,
-	Reliable,
-	Confirmation
-};
 
 struct Header {
-	Event event;
 	ID playerId;
 	uint64_t payloadSize;
-	ID messageId{0};
-	MessageType type{MessageType::Unreliable};
 };
 
 struct Move {

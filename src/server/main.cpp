@@ -1,168 +1,79 @@
-#include <asio/detached.hpp>
-#include <asio/use_awaitable.hpp>
-#include <chrono>
-#include <stdio.h>
-#include <asio.hpp>
-#include <map>
 #include "protocol.h"
-#include <algorithm>
+#include "server.h"
+#include <chrono>
+#include <optional>
 #include "util.h"
 
 
-using udp = asio::ip::udp;
 using Clock = std::chrono::high_resolution_clock;
 
+
 static proto::ID nextID() {
-    static proto::ID id{69};
+    static proto::ID id{1};
     return id++;
 }
 
-struct EndpointInfo {
-    proto::ID playerId;
-    proto::ID latestMessageId;
-};
-
-std::map<udp::endpoint, EndpointInfo> epInfos;
+std::map<udp::endpoint, proto::ID> playerIDs;
 proto::GameState state;
 int tickrate;
 
-asio::awaitable<void> confirm(udp::socket& socket, proto::Header header, udp::endpoint ep) {
-        char buf[sizeof header];
-        std::memcpy(buf, &header, sizeof header);
-        co_await socket.async_send_to(
-                        asio::buffer(buf, sizeof buf),
-                        ep,
-                        asio::use_awaitable);
-}
-
-void handleDatagram(udp::socket& socket, const udp::endpoint& endpoint, char* data, size_t n) {
-    if (n < sizeof (proto::Header)) {
-        fprintf(stderr, "ERROR: datagramsize < sizeof header\n");
-        return;
-    }
-
-    proto::Header h;
-    std::memcpy(&h, data, sizeof h);
-
-    if (sizeof h + h.payloadSize != n) {
-        fprintf(stderr, "ERROR: payload size is not correct\n");
-        return;
-    }
-
-    const auto end = state.players + state.numPlayers * sizeof (proto::Player);
-    auto it = std::find_if(state.players, end, [id=h.playerId](const proto::Player& p) {
-        return id == p.id;
-    });
-
-    if (it == end) {
-        fprintf(stderr, "ERROR: No player with ID=%d in state!\n", h.playerId);
-        return;
-    }
-
-    if (h.type == proto::MessageType::Reliable) {
-        asio::co_spawn(
-            socket.get_executor(), 
-            confirm(socket, proto::Header{h.event, h.playerId, 0, h.messageId, proto::MessageType::Confirmation}, endpoint),
-            asio::detached);
-
-        if (h.messageId < epInfos[endpoint].latestMessageId) {
-            printf("INFO: received old message (id %d)\n", h.messageId);
-            return;
-        } else {
-            epInfos[endpoint].latestMessageId = h.messageId;
-        }
-    }
-
-    proto::Player& player = *it;
-
-    switch (h.event) {
-        case proto::Event::Move:
-        {
-            if (sizeof (proto::Move) != h.payloadSize) {
-                printf("ERROR: invalid payload size for Move\n");
-                return;
+proto::Player& findPlayer(proto::ID id) {
+        const auto end = state.players + state.numPlayers * sizeof (proto::Player);
+        auto it = std::find_if(state.players, end, 
+            [id](const proto::Player& p) {
+                return p.id == id;
             }
-
-            printf("received move event\n");
-
-            proto::Move move;
-            std::memcpy(&move, data + sizeof h, h.payloadSize);
-            player.velo = move.velo;
-            break;
-        }
-        case proto::Event::Shoot:
-        {
-            if (sizeof (proto::Shoot) != h.payloadSize) {
-                printf("ERROR: invalid payload size for Shoot\n");
-                return;
-            }
-
-            printf("received shoot event\n");
-
-            proto::Shoot shoot;
-            std::memcpy(&shoot, data + sizeof h, h.payloadSize);
-            printf("player %d shot!\n", player.id);
-            break;
-        }
-        default:
-            fprintf(stderr, "ERROR: unhandled event received %d\n", static_cast<int>(h.event));
-    }
-}
-
-asio::awaitable<void> listen(udp::socket& socket) {
-    udp::endpoint peer;
-    char buf[2048];
-    for(;;) {
-        size_t n = co_await socket.async_receive_from(
-            asio::buffer(buf, sizeof buf),
-            peer,
-            asio::use_awaitable
         );
 
-        if (!epInfos.contains(peer)) {
-            printf("New connection!\n");
-            const auto id = nextID();
-            epInfos[peer] = {id, 0};
-            state.players[state.numPlayers++].id = id;
-            handleDatagram(socket, peer, buf, n);
-        } else {
-            handleDatagram(socket, peer, buf, n);
+        if (it == end) {
+            throw std::runtime_error(std::format("ERROR\t unable to find player {}", id));
         }
-    }
+
+        return *it;
 }
 
-asio::awaitable<void> sendUpdate(udp::socket& socket, const udp::endpoint& endpoint, proto::ID id) {
-    constexpr size_t n = sizeof (proto::Header) + sizeof state;
-    char buf[n];
-    proto::Header h{proto::Event::Update, id, sizeof state};
-    std::memcpy(buf, &h, sizeof h);
-    std::memcpy(buf + sizeof h, &state, sizeof state);
+template <typename T>
+std::pair<proto::Header, T> parseMessage(const Message& msg) {
 
-    size_t sent = co_await socket.async_send_to(
-                        asio::buffer(buf, n),
-                        endpoint,
-                        asio::use_awaitable);
-    if (sent != n) {
-        fprintf(stderr, "ERROR: invalid number of bytes sent (%ld when should been %ld)\n", sent, n);
-    }
+        if (msg.payload.size() < sizeof (proto::Header)) {
+            throw std::runtime_error("ERROR\t payloadsize smaller than header size");
+        }
+
+        proto::Header h;
+        std::memcpy(&h, msg.payload.data(), sizeof h);
+
+        if (!playerIDs.contains(msg.peer)) {
+            printf("INFO\t new player connected\n");
+            const proto::ID id = nextID();
+            playerIDs[msg.peer] = id;
+            h.playerId = id;
+            state.players[state.numPlayers++] = proto::Player{h.playerId};
+        }
+
+        if (const auto id = playerIDs[msg.peer]; id != h.playerId) {
+            throw std::runtime_error(std::format("ERROR\t invalid id {} should be {}", h.playerId, id));
+        }
+
+        if (h.payloadSize != msg.payload.size() - sizeof h) {
+            throw std::runtime_error("ERROR\t invalid message size");
+        }
+
+        if (h.payloadSize != sizeof (T)) {
+            throw std::runtime_error("ERROR\t invalid payload size");
+        }
+
+        T t;
+        std::memcpy(&t, msg.payload.data() + sizeof h, sizeof t);
+        return {h, t};
 }
 
-asio::awaitable<void> update(udp::socket& socket) {
-    asio::high_resolution_timer timer{socket.get_executor()};
-    const std::chrono::milliseconds interval{static_cast<long>(1000.f / tickrate)};
-    for (;;) {
-        co_await timer.async_wait(asio::use_awaitable);
-        timer.expires_after(interval);
+void sendUpdate(Server& server) {
+    proto::Header h{0, sizeof state};
+    Message msg{{}, {(const char*) &state, ((const char*)&state) + sizeof state}};
 
-        const float dt = std::chrono::duration_cast<std::chrono::duration<float>>(interval).count();
-        for (int i = 0; i < state.numPlayers; ++i) {
-            proto::Player& player = state.players[i];
-            player.pos = player.pos + dt * player.velo;
-        }
-
-        for (const auto& [ep, epInfo] : epInfos) {
-            co_await sendUpdate(socket, ep, epInfo.playerId);
-        }
+    for (const auto& [ep, id] : playerIDs) {
+        msg.peer = ep;
+        server.write(proto::updateChannel, msg);
     }
 }
 
@@ -176,17 +87,47 @@ int main(int argc, char** argv)
     unsigned short port = std::atoi(argv[1]);
     tickrate = std::atoi(argv[2]);
 
-    asio::io_context ioc;
-    udp::socket socket{ioc, udp::endpoint{udp::v4(), port}};
 
-    asio::co_spawn(ioc, listen(socket), asio::detached);
-    asio::co_spawn(ioc, update(socket), asio::detached);
+    Server server{port};
 
-    const auto ep = socket.local_endpoint();
-    printf("listeing on %s:%d\n", ep.address().to_string().c_str(), ep.port());
-    printf("tickrate %d\n", tickrate);
+    server.listen(proto::moveChannel, [](Message msg) {
+        try {
+            const auto [h, move] = parseMessage<proto::Move>(msg);
+            proto::Player& p = findPlayer(h.playerId);
+            p.velo = move.velo;
+        } catch(const std::exception& e) {
+            fprintf(stderr, "%s\n", e.what());
+        }
+    });
 
-    ioc.run();
+    server.listen(proto::shootChannel, [](Message msg) {
+        try {
+            const auto [h, shoot] = parseMessage<proto::Shoot>(msg);
+            proto::Player& p = findPlayer(h.playerId);
+            printf("player %d shoot (%.2f, %.2f)\n", p.id, shoot.direction.x, shoot.direction.y);
+        } catch(const std::exception& e) {
+            fprintf(stderr, "%s\n", e.what());
+        }
+    });
+
+    auto prevUpdate = Clock::now();
+    const std::chrono::duration<float> dt(1.0f/tickrate);
+    for(;;) {
+        const auto t0 = Clock::now();
+
+        // Update world
+        for (int i = 0; i < state.numPlayers; ++i) {
+            proto::Player& p = state.players[i];
+            p.pos = p.pos + dt.count() * p.velo;
+        }
+
+        sendUpdate(server);
+
+        while (Clock::now() - t0 < dt) {
+            server.poll();
+        }
+    }
+
 
     return 0;
 }
