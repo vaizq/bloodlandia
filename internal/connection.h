@@ -5,6 +5,7 @@
 #include <chrono>
 #include <map>
 #include <functional>
+#include <queue>
 #include <vector>
 #include <format>
 
@@ -23,7 +24,7 @@ struct Header {
 		Confirmation
 	};
 	Channel channel;
-	uint32_t payloadSize;
+	uint64_t payloadSize;
 	Type type;
 	uint32_t id;
 
@@ -36,22 +37,30 @@ struct Header {
 	}
 };
 
-struct Message {
-	Header header;
-	std::vector<char> payload;
-	Handler handler;
-};
 
 class Connection {
+
+	struct Message {
+		Header header;
+		std::vector<char> payload;
+		Handler handler;
+	};
+
 public:
 	using Listener = std::function<void(char*, size_t)>;
 
-	Connection(udp::socket& socket, udp::endpoint peer)
-	: socket{socket},
+	Connection(udp::endpoint peer)
+	: socket{ioc, udp::v4()},
 	  peer{std::move(peer)},
-	  timer{socket.get_executor()}
+	  timer{ioc}
 	{
 		start();
+		startReceive();
+		startSendReliable();
+	}
+
+	bool isConnected() {
+		return isConnected_;
 	}
 
 	void write(Channel channel, const void* data, size_t dataLen, Handler handler = [](std::error_code, size_t){}) {
@@ -75,17 +84,16 @@ public:
 		send(msg);
 	}
 
-	const udp::endpoint& getPeer() {
-		return peer;
-	}
-
 	void listen(Channel channel, Listener listener) {
 		listeners[channel] = listener;
 	}
 
-	void start() {
-		startReceive();
-		startSendReliable();
+	void poll() {
+		ioc.poll();
+	}
+
+	asio::io_context& get_executor() {
+		return ioc;
 	}
 
 private:
@@ -120,6 +128,11 @@ private:
 				}
 			}
 		);
+	}
+
+	void start() {
+		startSendReliable();
+		startReceive();
 	}
 
 	void startSendReliable() {
@@ -196,12 +209,14 @@ private:
 		}
 	}
 
-	udp::socket& socket;
+	asio::io_context ioc;
+	udp::socket socket;
 	udp::endpoint peer;
 	std::map<Channel, Listener> listeners;
 	char buf[2048];
 	std::map<uint32_t, Message> waitingForConfirmation;
 	asio::high_resolution_timer timer;
+	bool isConnected_{false};
 };
 
 
