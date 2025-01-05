@@ -15,19 +15,11 @@ constexpr Channel moveChannel = 1;
 constexpr Channel shootChannel = 2;
 constexpr Channel updateChannel = 3;
 
-
 struct Header {
 	ID playerId;
 	uint64_t payloadSize;
 };
 
-struct Move {
-	rl::Vector2 velo;
-};
-
-struct Shoot {
-	rl::Vector2 target;
-};
 
 struct Player {
 	ID id;
@@ -35,10 +27,28 @@ struct Player {
 	rl::Vector2 velo{0, 0};
 };
 
+struct Bullet {
+	rl::Vector2 pos;
+	rl::Vector2 velo;
+	ID shooterID;
+	Clock::time_point createdAt{Clock::now()};
+};
+
 struct GameState {
 	Player players[64];
 	uint64_t numPlayers;
+	Bullet bullets[128];
+	uint64_t numBullets;
 };
+
+struct Move {
+	rl::Vector2 velo;
+};
+
+struct Shoot {
+	Bullet bullet;
+};
+
 
 static std::pair<char*, size_t> makeMessage(Header header, const void* data) {
 	const size_t n = sizeof header + header.payloadSize;

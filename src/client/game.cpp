@@ -13,9 +13,12 @@ int renderWidth = 1280;
 int renderHeight = 960;
 float viewHeight = 50.f;
 
-constexpr float playerSpeed = 100.f;
-constexpr float playerRadius = 2.f;
+constexpr float playerSpeed = 80.f;
+constexpr float bulletSpeed = 100.0f;
+constexpr float playerRadius = 1.f;
 constexpr float enemyRadius = 1.f;
+constexpr float bulletRadius = 0.1f;
+
 
 float aspectRatio() {
     return 1.0f * renderWidth / renderHeight;
@@ -65,15 +68,19 @@ Game::Game(const char* serverAddr)
         std::memcpy(&state, data + sizeof h, sizeof state);
 
         enemies.clear();
-
         for (int i = 0; i < state.numPlayers; ++i) {
             proto::Player& p = state.players[i];
             if (p.id == player.id) {
                 player.pos = p.pos;
                 player.velo = p.velo;
             } else {
-                enemies.push_back(Enemy{p.pos, p.velo});
+                enemies.push_back(p);
             }
+        }
+
+        bullets.clear();
+        for (int i = 0; i < state.numBullets; ++i) {
+            bullets.push_back(state.bullets[i]);
         }
     });
 }
@@ -95,7 +102,7 @@ void Game::update() {
     renderHeight = rl::GetRenderHeight();
 
     const auto now = Clock::now();
-    const float dt = std::chrono::duration_cast<std::chrono::duration<float, std::chrono::seconds::period>>(now - prevUpdate).count();
+    const float dt = std::chrono::duration_cast<std::chrono::duration<float>>(now - prevUpdate).count();
     prevUpdate = now;
 
     const auto prevVelo = player.velo;
@@ -160,6 +167,10 @@ void Game::update() {
         enemy.pos = enemy.pos + dt * enemy.velo;
     }
 
+    for (auto& bullet : bullets) {
+        bullet.pos = bullet.pos + dt * bullet.velo;
+    }
+
     con.poll();
 }
 
@@ -177,7 +188,7 @@ void Game::render() {
     for(auto& enemy : enemies) {
         const auto pos = worldPosToScreenCoord(enemy.pos);
         const float r = enemyRadius * hpx();
-        rl::DrawCircleV(pos, r, rl::WHITE);
+        rl::DrawCircleV(pos, r, rl::GRAY);
         rl::DrawText(std::format("({:.1f}, {:.1f})", enemy.pos.x, enemy.pos.y).c_str(), pos.x + r, pos.y - r, 12, rl::WHITE);
     }
 
@@ -189,6 +200,15 @@ void Game::render() {
         rl::DrawLine(pos.x - w/2, pos.y, pos.x + w/2, pos.y, rl::GREEN);
         rl::DrawLine(pos.x, pos.y - w/2, pos.x, pos.y + w/2, rl::GREEN);
         rl::DrawText(std::format("({:.1f}, {:.1f})", wpos.x, wpos.y).c_str(), pos.x + w, pos.y - w, 12, rl::WHITE);
+    }
+
+    {
+        for(auto& bullet : bullets) {
+            const auto pos = worldPosToScreenCoord(bullet.pos);
+            const float r = bulletRadius * hpx();
+            rl::DrawCircleV(pos, r, rl::GRAY);
+            rl::DrawText(std::format("{}", bullet.shooterID).c_str(), pos.x + r, pos.y - r, 12, rl::WHITE);
+        }
     }
 
     rl::EndDrawing();
@@ -218,7 +238,24 @@ void Game::eventMove() {
 }
 
 void Game::eventShoot() {
-    proto::Shoot shoot{player.target};
+    
+    auto diff = (player.target - player.pos); 
+    if (diff.x == 0 && diff.y == 0) {
+        fprintf(stderr, "ERROR\t can't shoot yourself\n");
+        return;
+    }
+
+    diff = (diff / sqrt(diff.x*diff.x + diff.y*diff.y));
+
+    const proto::Bullet bullet(
+        player.pos + playerRadius * diff, 
+        bulletSpeed * diff,
+        player.id
+    );
+
+    bullets.push_back(bullet);
+
+    proto::Shoot shoot{bullet};
     auto [bufOut, n] = proto::makeMessage(
         {player.id, sizeof shoot}, 
         &shoot
@@ -228,11 +265,3 @@ void Game::eventShoot() {
         delete[] bufOut;
     });
 }
-
-
-
-
-
-
-
-

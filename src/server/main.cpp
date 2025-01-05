@@ -13,7 +13,10 @@ static proto::ID nextID() {
     return id++;
 }
 
+constexpr std::chrono::milliseconds bulletLiveDuration(1000);
+
 std::map<udp::endpoint, proto::ID> playerIDs;
+std::vector<proto::Bullet> bullets;
 proto::GameState state;
 int tickrate;
 
@@ -71,11 +74,14 @@ std::pair<proto::Header, T> parseMessage(const udp::endpoint& ep, const char* da
 void sendUpdate(Server& server) {
 
     for (const auto& [ep, id] : playerIDs) {
-        proto::Header h{id, sizeof state};
-        Message msg{ep, {(const char*)&h, ((const char*)&h) + sizeof h}};
-        msg.payload.insert(msg.payload.end(), (const char*)&state, ((const char*)&state) + sizeof state);
+        // TODO: Serialization
+        const proto::Header h{id, sizeof state};
+        constexpr size_t n = sizeof h + sizeof state;
+        char buf[n];
+        std::memcpy(buf, &h, sizeof h);
+        std::memcpy(buf + sizeof h, &state, sizeof state);
 
-        server.write(proto::updateChannel, msg);
+        server.write(proto::updateChannel, ep, buf, n);
     }
 }
 
@@ -89,6 +95,7 @@ int main(int argc, char** argv)
     unsigned short port = std::atoi(argv[1]);
     tickrate = std::atoi(argv[2]);
 
+    printf("server listening on port %d with tickrate %d\n", port, tickrate);
 
     Server server{port};
 
@@ -106,7 +113,9 @@ int main(int argc, char** argv)
         try {
             const auto [h, shoot] = parseMessage<proto::Shoot>(ep, data, n);
             proto::Player& p = findPlayer(h.playerId);
-            printf("player %d shoot target is (%.1f, %.1f)\n", p.id, shoot.target.x, shoot.target.y);
+            bullets.push_back(shoot.bullet);
+            bullets.back().createdAt = Clock::now();
+            printf("player %d shot\ncurrently %ld bullets in air\n", p.id, bullets.size());
         } catch(const std::exception& e) {
             fprintf(stderr, "%s\n", e.what());
         }
@@ -117,10 +126,19 @@ int main(int argc, char** argv)
     for(;;) {
         const auto t0 = Clock::now();
 
-        // Update world
         for (int i = 0; i < state.numPlayers; ++i) {
             proto::Player& p = state.players[i];
             p.pos = p.pos + dt.count() * p.velo;
+        }
+
+        bullets.erase(std::remove_if(bullets.begin(), bullets.end(), [](const proto::Bullet& bullet) {
+            return Clock::now() - bullet.createdAt > bulletLiveDuration;
+        }), bullets.end());
+
+        state.numBullets = 0;
+        for (auto& b : bullets) {
+            b.pos = b.pos + dt.count() * b.velo;
+            state.bullets[state.numBullets++] = b;
         }
 
         sendUpdate(server);

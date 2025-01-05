@@ -11,16 +11,8 @@
 
 using udp = asio::ip::udp;
 
-struct Player {
-	proto::ID id;
-	rl::Vector2 pos;
-	rl::Vector2 velo;
+struct Player : public proto::Player {
 	rl::Vector2 target;
-};
-
-struct Enemy {
-	rl::Vector2 pos;
-	rl::Vector2 velo;
 };
 
 struct Message {
@@ -48,9 +40,11 @@ private:
 
 	Clock::time_point prevUpdate;
 	Clock::time_point prevServerUpdate;
-	Player player;
-	std::vector<Enemy> enemies;
 	Connection con;
+
+	Player player;
+	std::vector<proto::Player> enemies;
+	std::vector<proto::Bullet> bullets;
 };
 
 

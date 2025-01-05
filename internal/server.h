@@ -8,19 +8,13 @@
 
 using udp = asio::ip::udp;
 
-struct Message {
-	/*
-	Message() = default;
-	Message(udp::endpoint peer, const void* data, size_t datalen)
-	: peer{peer}, payload{(const char*) data, ((const char*) data) + datalen}
-	{}
-	*/
-
-	udp::endpoint peer; // Somekind of identifier for peer
-	std::vector<char> payload;
-};
 
 class Server {
+	struct Message {
+		udp::endpoint peer; // Somekind of identifier for peer
+		std::vector<char> payload;
+	};
+
 
 	struct ReliableMessage {
 		Header h;
@@ -49,26 +43,37 @@ public:
 		start();
 	}
 
-	void write(Channel ch, const Message& msg) {
-		if (!peers.contains(msg.peer)) {
-			peers[msg.peer] = PeerInfo{{{ch, ChannelInfo{}}}};
-			printf("INFO: initialized peerinfo for new peer\n");
-		} else if (!peers[msg.peer].chInfo.contains(ch)) {
-			peers[msg.peer].chInfo[ch] = ChannelInfo{};
-			printf("INFO: initialized channelinfo\n");
+	void write(Channel ch, const udp::endpoint& peer, const void* data, size_t datalen) {
+		if (!peers.contains(peer)) {
+			peers[peer] = PeerInfo{{{ch, ChannelInfo{}}}};
+			fprintf(stderr, "ERROR\t peerinfo did not exist for %s:%d\n",
+					peer.address().to_string().c_str(), peer.port());
+		}
+		if (!peers[peer].chInfo.contains(ch)) {
+			peers[peer].chInfo[ch] = ChannelInfo{};
+			fprintf(stderr, "ERROR\t ChannelInfo on channel %d did not exist for %s:%d\n",
+					ch, peer.address().to_string().c_str(), peer.port());
+
 		}
 
-		send({ch, msg.payload.size(), Header::Type::Unreliable, peers[msg.peer].chInfo[ch].writeID++}, msg);
+		send({ch, datalen, Header::Type::Unreliable, peers[peer].chInfo[ch].writeID++},
+		     {peer, {(const char*)data, (const char*)data + datalen}});
 	}
 
-	void writeReliable(Channel ch, const Message& msg) {
-		if (!peers.contains(msg.peer)) {
-			peers[msg.peer] = PeerInfo{{{ch, ChannelInfo{}}}};
-		} else if (!peers[msg.peer].chInfo.contains(ch)) {
-			peers[msg.peer].chInfo[ch] = ChannelInfo{};
+	void writeReliable(Channel ch, const udp::endpoint& peer, const void* data, size_t datalen) {
+		if (!peers.contains(peer)) {
+			peers[peer] = PeerInfo{{{ch, ChannelInfo{}}}};
+			fprintf(stderr, "ERROR\t peerinfo did not exist for %s:%d\n",
+					peer.address().to_string().c_str(), peer.port());
+		}
+		if (!peers[peer].chInfo.contains(ch)) {
+			peers[peer].chInfo[ch] = ChannelInfo{};
+			fprintf(stderr, "ERROR\t ChannelInfo on channel %d did not exist for %s:%d\n",
+					ch, peer.address().to_string().c_str(), peer.port());
 		}
 
-		send({ch, msg.payload.size(), Header::Type::Unreliable, peers[msg.peer].chInfo[ch].writeReliableID++}, msg);
+		send({ch, datalen, Header::Type::Reliable, peers[peer].chInfo[ch].writeReliableID++},
+		     {peer, {(const char*)data, (const char*)data + datalen}});
 	}
 
 	void listen(Channel ch, Listener listener) {
@@ -183,7 +188,7 @@ private:
 	udp::socket socket;
 	std::map<udp::endpoint, PeerInfo> peers;
 	std::map<Channel, Listener> listeners;
-	char bufIn[2048];
+	char bufIn[10000];
 	udp::endpoint peer;
 };
 

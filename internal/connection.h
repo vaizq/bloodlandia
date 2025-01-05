@@ -212,7 +212,7 @@ private:
 	udp::socket socket;
 	udp::endpoint peer;
 	std::map<Channel, Listener> listeners;
-	char buf[2048];
+	char buf[10000];
 	std::map<uint32_t, Message> waitingForConfirmation;
 	asio::high_resolution_timer timer;
 	bool isConnected_{false};
