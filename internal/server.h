@@ -15,7 +15,6 @@ class Server {
 		std::vector<char> payload;
 	};
 
-
 	struct ReliableMessage {
 		Header h;
 		Message msg;
@@ -29,7 +28,6 @@ class Server {
 
 		std::map<uint32_t, ReliableMessage> unConfirmed;
 	};
-
 
 	struct PeerInfo {
 		std::map<Channel, ChannelInfo> chInfo;

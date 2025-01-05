@@ -1,8 +1,8 @@
 #include "protocol.h"
 #include "server.h"
 #include <chrono>
-#include <optional>
 #include "util.h"
+#include <set>
 
 
 using Clock = std::chrono::high_resolution_clock;
@@ -17,18 +17,17 @@ constexpr std::chrono::milliseconds bulletLiveDuration(1000);
 
 std::map<udp::endpoint, proto::ID> playerIDs;
 std::vector<proto::Bullet> bullets;
+std::vector<proto::Player> players;
 proto::GameState state;
 int tickrate;
 
 proto::Player& findPlayer(proto::ID id) {
-        const auto end = state.players + state.numPlayers * sizeof (proto::Player);
-        auto it = std::find_if(state.players, end, 
-            [id](const proto::Player& p) {
+        auto it = std::find_if(players.begin(), players.end(), [id](const proto::Player& p) {
                 return p.id == id;
             }
         );
 
-        if (it == end) {
+        if (it == players.end()) {
             throw std::runtime_error(std::format("ERROR\t unable to find player {}", id));
         }
 
@@ -37,7 +36,6 @@ proto::Player& findPlayer(proto::ID id) {
 
 template <typename T>
 std::pair<proto::Header, T> parseMessage(const udp::endpoint& ep, const char* data, size_t n) {
-
         if (n < sizeof (proto::Header)) {
             throw std::runtime_error("ERROR\t payloadsize smaller than header size");
         }
@@ -48,9 +46,8 @@ std::pair<proto::Header, T> parseMessage(const udp::endpoint& ep, const char* da
         if (!playerIDs.contains(ep)) {
             const proto::ID id = nextID();
             playerIDs[ep] = id;
+            players.push_back(proto::Player{id});
             h.playerId = id;
-            state.players[state.numPlayers++] = proto::Player{id};
-
             printf("INFO\t new player connected %s:%d id %d\n", ep.address().to_string().c_str(), ep.port(), id);
         }
 
@@ -126,14 +123,33 @@ int main(int argc, char** argv)
     for(;;) {
         const auto t0 = Clock::now();
 
-        for (int i = 0; i < state.numPlayers; ++i) {
-            proto::Player& p = state.players[i];
-            p.pos = p.pos + dt.count() * p.velo;
+        {
+            std::set<proto::ID> killed;
+            for (const auto& b : bullets) {
+                for (auto& p : players) {
+                    const float dist = sqrt(pow(p.pos.x - b.pos.x, 2) + pow(p.pos.y - b.pos.y, 2));
+                    if (dist < proto::playerRadius && !killed.contains(p.id) && p.id != b.shooterID) {
+                        printf("player %d killed player %d\n", b.shooterID, p.id);
+                        p.stats.deaths++;
+                        p.pos = rl::Vector2{0, 0};
+                        p.velo = rl::Vector2{0, 0};
+                        killed.insert(p.id);
+                        findPlayer(b.shooterID).stats.kills++;
+                    }
+                }
+            }
         }
 
         bullets.erase(std::remove_if(bullets.begin(), bullets.end(), [](const proto::Bullet& bullet) {
             return Clock::now() - bullet.createdAt > bulletLiveDuration;
         }), bullets.end());
+
+
+        state.numPlayers = 0;
+        for (auto& p : players) {
+            p.pos = p.pos + dt.count() * p.velo;
+            state.players[state.numPlayers++] = p;
+        }
 
         state.numBullets = 0;
         for (auto& b : bullets) {
@@ -148,7 +164,6 @@ int main(int argc, char** argv)
             server.poll();
         }
     }
-
 
     return 0;
 }

@@ -11,6 +11,11 @@ namespace proto {
 
 using ID = uint32_t;
 
+constexpr float playerSpeed = 80.f;
+constexpr float bulletSpeed = 100.0f;
+constexpr float playerRadius = 1.f;
+constexpr float enemyRadius = 1.f;
+constexpr float bulletRadius = 0.1f;
 constexpr Channel moveChannel = 1;
 constexpr Channel shootChannel = 2;
 constexpr Channel updateChannel = 3;
@@ -20,11 +25,16 @@ struct Header {
 	uint64_t payloadSize;
 };
 
+struct Stats {
+	uint32_t kills{0};
+	uint32_t deaths{0};
+};
 
 struct Player {
 	ID id;
 	rl::Vector2 pos{0, 0};
 	rl::Vector2 velo{0, 0};
+	Stats stats;
 };
 
 struct Bullet {
@@ -48,7 +58,6 @@ struct Move {
 struct Shoot {
 	Bullet bullet;
 };
-
 
 static std::pair<char*, size_t> makeMessage(Header header, const void* data) {
 	const size_t n = sizeof header + header.payloadSize;

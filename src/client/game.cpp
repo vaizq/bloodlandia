@@ -13,11 +13,6 @@ int renderWidth = 1280;
 int renderHeight = 960;
 float viewHeight = 50.f;
 
-constexpr float playerSpeed = 80.f;
-constexpr float bulletSpeed = 100.0f;
-constexpr float playerRadius = 1.f;
-constexpr float enemyRadius = 1.f;
-constexpr float bulletRadius = 0.1f;
 
 
 float aspectRatio() {
@@ -73,6 +68,7 @@ Game::Game(const char* serverAddr)
             if (p.id == player.id) {
                 player.pos = p.pos;
                 player.velo = p.velo;
+                player.stats = p.stats;
             } else {
                 enemies.push_back(p);
             }
@@ -108,20 +104,20 @@ void Game::update() {
     const auto prevVelo = player.velo;
 
     if (rl::IsKeyPressed(rl::KEY_A)) {
-        player.velo.x = -playerSpeed;
+        player.velo.x = -proto::playerSpeed;
     } else if (rl::IsKeyReleased(rl::KEY_A)) {
         if (rl::IsKeyDown(rl::KEY_D)) {
-            player.velo.x = playerSpeed;
+            player.velo.x = proto::playerSpeed;
         } else {
             player.velo.x = 0;
         }
     }
 
     if (rl::IsKeyPressed(rl::KEY_D)) {
-        player.velo.x = playerSpeed;
+        player.velo.x = proto::playerSpeed;
     } else if (rl::IsKeyReleased(rl::KEY_D)) {
         if (rl::IsKeyDown(rl::KEY_A)) {
-            player.velo.x = -playerSpeed;
+            player.velo.x = -proto::playerSpeed;
         } else {
             player.velo.x = 0;
         }
@@ -129,10 +125,10 @@ void Game::update() {
     }
 
     if (rl::IsKeyPressed(rl::KEY_W)) {
-        player.velo.y = -playerSpeed;
+        player.velo.y = -proto::playerSpeed;
     } else if (rl::IsKeyReleased(rl::KEY_W)) {
         if (rl::IsKeyDown(rl::KEY_S)) {
-            player.velo.y = playerSpeed;
+            player.velo.y = proto::playerSpeed;
         } else {
             player.velo.y = 0;
         }
@@ -140,13 +136,20 @@ void Game::update() {
     }
 
     if (rl::IsKeyPressed(rl::KEY_S)) {
-        player.velo.y = playerSpeed;
+        player.velo.y = proto::playerSpeed;
     } else if (rl::IsKeyReleased(rl::KEY_S)) {
         if (rl::IsKeyDown(rl::KEY_W)) {
-            player.velo.y = -playerSpeed;
+            player.velo.y = -proto::playerSpeed;
         } else {
             player.velo.y = 0;
         }
+    }
+
+    if (rl::IsKeyPressed(rl::KEY_TAB)) {
+        printf("STATS\t %d kills %d deaths %.2f kd\n", 
+               player.stats.kills, 
+               player.stats.deaths, 
+               1.0f * player.stats.kills / player.stats.deaths);
     }
 
     if (rl::IsMouseButtonPressed(rl::MOUSE_BUTTON_LEFT)) {
@@ -180,14 +183,14 @@ void Game::render() {
 
     {
         const auto pos = screenCenter();
-        const float r = playerRadius * hpx();
+        const float r = proto::playerRadius * hpx();
         rl::DrawCircleV(screenCenter(), r, rl::WHITE);
         rl::DrawText(std::format("({:.1f}, {:.1f})", player.pos.x, player.pos.y).c_str(), pos.x + r, pos.y - r, 12, rl::WHITE);
     }
 
     for(auto& enemy : enemies) {
         const auto pos = worldPosToScreenCoord(enemy.pos);
-        const float r = enemyRadius * hpx();
+        const float r = proto::enemyRadius * hpx();
         rl::DrawCircleV(pos, r, rl::GRAY);
         rl::DrawText(std::format("({:.1f}, {:.1f})", enemy.pos.x, enemy.pos.y).c_str(), pos.x + r, pos.y - r, 12, rl::WHITE);
     }
@@ -205,7 +208,7 @@ void Game::render() {
     {
         for(auto& bullet : bullets) {
             const auto pos = worldPosToScreenCoord(bullet.pos);
-            const float r = bulletRadius * hpx();
+            const float r = proto::bulletRadius * hpx();
             rl::DrawCircleV(pos, r, rl::GRAY);
             rl::DrawText(std::format("{}", bullet.shooterID).c_str(), pos.x + r, pos.y - r, 12, rl::WHITE);
         }
@@ -248,8 +251,8 @@ void Game::eventShoot() {
     diff = (diff / sqrt(diff.x*diff.x + diff.y*diff.y));
 
     const proto::Bullet bullet(
-        player.pos + playerRadius * diff, 
-        bulletSpeed * diff,
+        player.pos + proto::playerRadius * diff, 
+        proto::bulletSpeed * diff,
         player.id
     );
 
