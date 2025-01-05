@@ -33,28 +33,29 @@ proto::Player& findPlayer(proto::ID id) {
 }
 
 template <typename T>
-std::pair<proto::Header, T> parseMessage(const Message& msg) {
+std::pair<proto::Header, T> parseMessage(const udp::endpoint& ep, const char* data, size_t n) {
 
-        if (msg.payload.size() < sizeof (proto::Header)) {
+        if (n < sizeof (proto::Header)) {
             throw std::runtime_error("ERROR\t payloadsize smaller than header size");
         }
 
         proto::Header h;
-        std::memcpy(&h, msg.payload.data(), sizeof h);
+        std::memcpy(&h, data, sizeof h);
 
-        if (!playerIDs.contains(msg.peer)) {
-            printf("INFO\t new player connected\n");
+        if (!playerIDs.contains(ep)) {
             const proto::ID id = nextID();
-            playerIDs[msg.peer] = id;
+            playerIDs[ep] = id;
             h.playerId = id;
-            state.players[state.numPlayers++] = proto::Player{h.playerId};
+            state.players[state.numPlayers++] = proto::Player{id};
+
+            printf("INFO\t new player connected %s:%d id %d\n", ep.address().to_string().c_str(), ep.port(), id);
         }
 
-        if (const auto id = playerIDs[msg.peer]; id != h.playerId) {
+        if (const auto id = playerIDs[ep]; id != h.playerId) {
             throw std::runtime_error(std::format("ERROR\t invalid id {} should be {}", h.playerId, id));
         }
 
-        if (h.payloadSize != msg.payload.size() - sizeof h) {
+        if (h.payloadSize != n - sizeof h) {
             throw std::runtime_error("ERROR\t invalid message size");
         }
 
@@ -63,16 +64,17 @@ std::pair<proto::Header, T> parseMessage(const Message& msg) {
         }
 
         T t;
-        std::memcpy(&t, msg.payload.data() + sizeof h, sizeof t);
+        std::memcpy(&t, data + sizeof h, sizeof t);
         return {h, t};
 }
 
 void sendUpdate(Server& server) {
-    proto::Header h{0, sizeof state};
-    Message msg{{}, {(const char*) &state, ((const char*)&state) + sizeof state}};
 
     for (const auto& [ep, id] : playerIDs) {
-        msg.peer = ep;
+        proto::Header h{id, sizeof state};
+        Message msg{ep, {(const char*)&h, ((const char*)&h) + sizeof h}};
+        msg.payload.insert(msg.payload.end(), (const char*)&state, ((const char*)&state) + sizeof state);
+
         server.write(proto::updateChannel, msg);
     }
 }
@@ -90,9 +92,9 @@ int main(int argc, char** argv)
 
     Server server{port};
 
-    server.listen(proto::moveChannel, [](Message msg) {
+    server.listen(proto::moveChannel, [](const udp::endpoint& ep, char* data, size_t n) {
         try {
-            const auto [h, move] = parseMessage<proto::Move>(msg);
+            const auto [h, move] = parseMessage<proto::Move>(ep, data, n);
             proto::Player& p = findPlayer(h.playerId);
             p.velo = move.velo;
         } catch(const std::exception& e) {
@@ -100,9 +102,9 @@ int main(int argc, char** argv)
         }
     });
 
-    server.listen(proto::shootChannel, [](Message msg) {
+    server.listen(proto::shootChannel, [](const udp::endpoint& ep, char* data, size_t n) {
         try {
-            const auto [h, shoot] = parseMessage<proto::Shoot>(msg);
+            const auto [h, shoot] = parseMessage<proto::Shoot>(ep, data, n);
             proto::Player& p = findPlayer(h.playerId);
             printf("player %d shoot (%.2f, %.2f)\n", p.id, shoot.direction.x, shoot.direction.y);
         } catch(const std::exception& e) {
@@ -123,6 +125,7 @@ int main(int argc, char** argv)
 
         sendUpdate(server);
 
+        server.poll();
         while (Clock::now() - t0 < dt) {
             server.poll();
         }

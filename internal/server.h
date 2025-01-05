@@ -42,29 +42,28 @@ class Server {
 	};
 
 public:
-	using Listener = std::function<void(Message)>;
+	using Listener = std::function<void(const udp::endpoint& ep, char* data, size_t datalen)>;
 	Server(unsigned short port)
 	: socket{ioc, udp::endpoint{udp::v4(), port}}
 	{
 		start();
 	}
 
-	void write(Channel ch, Message msg) {
+	void write(Channel ch, const Message& msg) {
 		if (!peers.contains(msg.peer)) {
 			peers[msg.peer] = PeerInfo{{{ch, ChannelInfo{}}}};
 			printf("INFO: initialized peerinfo for new peer\n");
 		} else if (!peers[msg.peer].chInfo.contains(ch)) {
 			peers[msg.peer].chInfo[ch] = ChannelInfo{};
+			printf("INFO: initialized channelinfo\n");
 		}
 
 		send({ch, msg.payload.size(), Header::Type::Unreliable, peers[msg.peer].chInfo[ch].writeID++}, msg);
-			
 	}
 
-	void writeReliable(Channel ch, Message msg) {
+	void writeReliable(Channel ch, const Message& msg) {
 		if (!peers.contains(msg.peer)) {
 			peers[msg.peer] = PeerInfo{{{ch, ChannelInfo{}}}};
-			printf("INFO: initialized peerinfo for new peer\n");
 		} else if (!peers[msg.peer].chInfo.contains(ch)) {
 			peers[msg.peer].chInfo[ch] = ChannelInfo{};
 		}
@@ -77,26 +76,29 @@ public:
 	}
 
 	void poll() {
-		ioc.poll();
+		ioc.poll_one();
 	}
 private:
-	void send(Header h, Message msg) {
-		auto buf = std::make_unique<std::vector<char>>((const char*)&h, ((const char*)&h) + sizeof h);
-		buf->insert(buf->end(), msg.payload.begin(), msg.payload.end());
+	void send(Header h, const Message& msg) {
+		const size_t n = sizeof h + msg.payload.size();
+		char* buf = new char[n];
+		std::memcpy(buf, &h, sizeof h);
+		std::memcpy(buf + sizeof h, msg.payload.data(), msg.payload.size());
+
 		socket.async_send_to(
-			asio::buffer(*buf),
+			asio::buffer(buf, n),
 			msg.peer,
-			[buf = std::move(buf)](std::error_code ec, size_t n) {
+			[buf](std::error_code ec, size_t n) {
 				if (ec) {
 					fprintf(stderr, "ERROR\t send(): %s\n", ec.message().c_str());
 				}
+				delete[] buf;
 		});
 	}
 
 	void start() {
 		receive();
 	}
-
 
 	void receive() {
 		socket.async_receive_from(
@@ -137,7 +139,8 @@ private:
 
 		if (!peers.contains(peer)) {
 			peers[peer] = PeerInfo{{{h.channel, ChannelInfo{}}}};
-		} else if (!peers[peer].chInfo.contains(h.channel)) {
+		} 
+		if (!peers[peer].chInfo.contains(h.channel)) {
 			peers[peer].chInfo[h.channel] = ChannelInfo{};
 		}
 
@@ -146,6 +149,7 @@ private:
 			{
 				auto& prevID = peers[peer].chInfo[h.channel].receiveID;
 				if (h.id < prevID) {
+					printf("INFO\t received old message %d\n", h.id);
 					return;
 				} else {
 					prevID = h.id;
@@ -157,6 +161,7 @@ private:
 				send({h.channel, 0, Header::Type::Confirmation, h.id}, {peer, {}});						
 				auto& prevID = peers[peer].chInfo[h.channel].receiveReliableID;
 				if (h.id < prevID) {
+					printf("INFO\t received old message %d\n", h.id);
 					return;
 				} else {
 					prevID = h.id;
@@ -171,7 +176,7 @@ private:
 				return;
 		}
 
-		listeners[h.channel](Message{peer, {bufIn + sizeof h, bufIn + sizeof h + h.payloadSize}});
+		listeners[h.channel](peer, bufIn + sizeof h, h.payloadSize);
 	}
 
 	asio::io_context ioc;
@@ -181,9 +186,5 @@ private:
 	char bufIn[2048];
 	udp::endpoint peer;
 };
-
-
-static void run() {
-}
 
 #endif

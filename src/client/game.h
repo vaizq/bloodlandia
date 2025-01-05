@@ -7,6 +7,7 @@
 #include <asio.hpp>
 #include <map>
 #include "protocol.h"
+#include "connection.h"
 
 using udp = asio::ip::udp;
 
@@ -49,13 +50,7 @@ private:
 	Clock::time_point prevServerUpdate;
 	Player player;
 	std::vector<Enemy> enemies;
-	asio::io_context ioc;
-	udp::socket socket;
-	const udp::endpoint server;
-	udp::endpoint peer;
-	std::map<proto::ID, Message> waitingForConfirmation;
-
-	char buf[4048];
+	Connection con;
 };
 
 

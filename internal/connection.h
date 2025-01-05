@@ -55,8 +55,6 @@ public:
 	  timer{ioc}
 	{
 		start();
-		startReceive();
-		startSendReliable();
 	}
 
 	bool isConnected() {
@@ -99,20 +97,21 @@ public:
 private:
 	void send(const Header& h, const void* data = nullptr, Handler handler = [](std::error_code, size_t){}) {
 		const size_t totalSize = sizeof h + h.payloadSize;
-		auto buf = std::make_unique<char[]>(totalSize);
-		std::memcpy(buf.get(), &h, sizeof h);
+		auto buf = new char[totalSize];
+		std::memcpy(buf, &h, sizeof h);
 		if (h.payloadSize > 0) {
-			std::memcpy(buf.get() + sizeof h, data, h.payloadSize);
+			std::memcpy(buf + sizeof h, data, h.payloadSize);
 		}
 
 		socket.async_send_to(
-			asio::buffer(buf.get(), totalSize),
+			asio::buffer(buf, totalSize),
 			peer,
-			[handler, buf=std::move(buf)](std::error_code ec, size_t n) {
+			[handler, buf](std::error_code ec, size_t n) {
 				handler(ec, n);
 				if (ec) {
 					fprintf(stderr, "ERROR Connection::write: %s\n", ec.message().c_str());
 				}
+				delete[] buf;
 			});
 	}
 

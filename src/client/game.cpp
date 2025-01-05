@@ -40,110 +40,48 @@ rl::Vector2 Game::screenCoordToWorldPos(rl::Vector2 coord) {
 }
 
 Game::Game(const char* serverAddr)
-:   socket{ioc, udp::v4()},
-    server{udp::resolver{ioc}.resolve(serverAddr, "6969")->endpoint()}
+    : con{udp::endpoint{asio::ip::make_address(serverAddr), 6969}}
 {
-    printf("server: %s:%d\n", server.address().to_string().c_str(), server.port());
-    printf("local: %s:%d\n", 
-           socket.local_endpoint().address().to_string().c_str(), 
-           socket.local_endpoint().port());
-    startReceive();
-}
+    con.listen(proto::updateChannel, [this](char* data, size_t n) {
+        proto::Header h;
+        proto::GameState state;
 
-void Game::startReceive() {
-    socket.async_receive_from(
-        asio::buffer(buf, sizeof buf),
-        peer,
-        [this](std::error_code ec, size_t n) {
-            if (ec) {
-                fprintf(stderr, "ERROR: failed to receive_from: %s\n", ec.message().c_str());
-                startReceive();
-                return;
-            }
+        if (n != sizeof h + sizeof state) {
+            fprintf(stderr, "ERROR\t invalid datalen\n");
+            return;
+        }
 
-            if (n < sizeof (proto::Header)) {
-                fprintf(stderr, "ERROR: received less bytes than header\n");
-                startReceive();
-                return;
-            }
-
-            proto::Header h;
-            std::memcpy(&h, buf, sizeof h);
+        std::memcpy(&h, data, sizeof h);
+        if (player.id != h.playerId) {
+            printf("INFO\t different player id (my: %d header: %d)\n", player.id, h.playerId);
             player.id = h.playerId;
+        }
 
-            if(sizeof h + h.payloadSize != n) {
-                fprintf(stderr, "ERROR: received invalid number of bytes %ld when should have been %ld. PayloadSize: %ld\n",
-                        n, sizeof h + h.payloadSize, h.payloadSize);
-                startReceive();
-                return;
+        if (h.payloadSize != sizeof state) {
+            fprintf(stderr, "ERROR\t, invalid payloadsize\n");
+            return;
+        }
+
+        std::memcpy(&state, data + sizeof h, sizeof state);
+
+        enemies.clear();
+
+        for (int i = 0; i < state.numPlayers; ++i) {
+            proto::Player& p = state.players[i];
+            if (p.id == player.id) {
+                player.pos = p.pos;
+                player.velo = p.velo;
+            } else {
+                enemies.push_back(Enemy{p.pos, p.velo});
             }
-
-            switch (h.type) {
-                case proto::MessageType::Reliable:
-                {
-                    // send confirmation back
-                    proto::Header confh{h.event, h.playerId, 0, h.messageId, proto::MessageType::Confirmation};
-                    char* buf = new char[sizeof confh];
-                    std::memcpy(buf, &confh, sizeof confh);
-                    socket.async_send_to(
-                        asio::buffer(buf, sizeof confh),
-                        peer,
-                        [buf](std::error_code ec, size_t n) {
-                                if (ec) {
-                                    fprintf(stderr, "ERROR: failed to send confirmation: %s\n", ec.message().c_str());
-                                }
-                                delete[] buf;
-                        });
-                    break;
-                }
-                case proto::MessageType::Confirmation:
-                    if (waitingForConfirmation.erase(h.messageId) != 0) {
-                        printf("INFO: Got confirmation for %d\n", h.messageId);
-                    }
-                    startReceive();
-                    return;
-                case proto::MessageType::Unreliable:
-                    break;
-            }
-
-            switch (h.event) {
-                case proto::Event::Update:
-                {
-                    if (sizeof (proto::GameState) != h.payloadSize) {
-                        fprintf(stderr, "ERROR: invalid payload size for Update\n");
-                        return;
-                    }
-
-                    proto::GameState state;
-                    std::memcpy(&state, buf + sizeof (proto::Header), h.payloadSize);
-
-                    enemies.clear();
-                    for (int i = 0; i < state.numPlayers; ++i) {
-                        const auto& p = state.players[i];
-                        if (p.id != player.id) {
-                            enemies.emplace_back(p.pos, p.velo);
-                        } else {
-                            player.pos = p.pos;
-                            player.velo = p.velo;
-                        }
-                    }
-                    prevServerUpdate = Clock::now();
-                    break;
-                }
-                default:
-                    fprintf(stderr, "ERROR: invalid event %d\n", static_cast<int>(h.event));
-            }
-
-            startReceive();
-        });
+        }
+    });
 }
 
 void Game::init() {
     rl::InitWindow(renderWidth, renderHeight, "Verilandia");
     rl::SetTargetFPS(144);
     rl::HideCursor();
-
-    // connect()
 
     prevUpdate = Clock::now();
     player.pos.x = 0;
@@ -222,7 +160,7 @@ void Game::update() {
         enemy.pos = enemy.pos + dt * enemy.velo;
     }
 
-    ioc.poll();
+    con.poll();
 }
 
 void Game::render() {
@@ -269,43 +207,23 @@ void Game::run() {
 
 void Game::eventMove() {
     proto::Move move{player.velo};
-    proto::Header h{proto::Event::Move, player.id, sizeof move, nextID(), proto::MessageType::Reliable};
+    proto::Header h{player.id, sizeof move};
     auto [bufOut, n] = proto::makeMessage(h, &move);
 
-    waitingForConfirmation[h.messageId] = Message{h, {(char*)&move, (char*)&move + sizeof move}};
-
-    socket.async_send_to(
-            asio::buffer(bufOut, n),
-            server,
-            [bufOut](std::error_code ec, size_t n) {
-                if (ec) {
-                    fprintf(stderr, "ERROR: failed to send move event!: %s\n", ec.message().c_str());
-                }
-                delete[] bufOut;
-            }
-    );
+    printf("send move event with id %d\n", player.id);
+    con.write(proto::moveChannel, bufOut, n, [bufOut](auto, auto) {
+        delete[] bufOut;
+    });
 }
 
 void Game::eventShoot() {
     proto::Shoot shoot{player.target - player.pos};
     auto [bufOut, n] = proto::makeMessage(
-        {proto::Event::Shoot, player.id, sizeof shoot}, 
+        {player.id, sizeof shoot}, 
         &shoot
     );
 
-    socket.async_send_to(
-            asio::buffer(bufOut, n),
-            server,
-            [bufOut](std::error_code ec, size_t n) {
-                if (ec) {
-                    fprintf(stderr, "ERROR: failed to send shoot event!: %s\n", ec.message().c_str());
-                }
-                delete[] bufOut;
-            }
-    );
-}
-
-proto::ID Game::nextID() {
-    static proto::ID id{420};
-    return id++;
+    con.write(proto::shootChannel, bufOut, n, [bufOut](auto, auto) {
+        delete[] bufOut;
+    });
 }
