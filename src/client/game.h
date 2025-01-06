@@ -45,6 +45,7 @@ private:
 	Player player;
 	std::vector<proto::Player> enemies;
 	std::vector<proto::Bullet> bullets;
+	bool viewStats{false};
 };
 
 
