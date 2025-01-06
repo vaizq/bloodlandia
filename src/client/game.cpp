@@ -50,7 +50,6 @@ Game::Game(const char* serverAddr)
 
         std::memcpy(&h, data, sizeof h);
         if (player.id != h.playerId) {
-            printf("INFO\t different player id (my: %d header: %d)\n", player.id, h.playerId);
             player.id = h.playerId;
         }
 
@@ -81,12 +80,6 @@ Game::Game(const char* serverAddr)
     });
 }
 
-Game::~Game() {
-    moveAnimation.reset();
-    rl::CloseWindow();
-}
-
-
 void Game::init() {
     rl::InitWindow(renderWidth, renderHeight, "Verilandia");
     rl::SetTargetFPS(144);
@@ -95,8 +88,8 @@ void Game::init() {
     moveAnimation = std::make_unique<Animation>("assets/Top_Down_Survivor/rifle/move", 1000ms);
 
     prevUpdate = Clock::now();
-    player.pos.x = 0;
-    player.pos.y = 0;
+    player.pos.x = RandFloat(100) - 50;
+    player.pos.y = RandFloat(100) - 50;
     player.velo.x = 0;
     player.velo.y = 0;
 }
@@ -293,7 +286,6 @@ void Game::eventMove() {
     proto::Header h{player.id, sizeof move};
     auto [bufOut, n] = proto::makeMessage(h, &move);
 
-    printf("send move event with id %d\n", player.id);
     con.write(proto::moveChannel, bufOut, n, [bufOut](auto, auto) {
         delete[] bufOut;
     });
@@ -304,7 +296,6 @@ void Game::eventMouseMove() {
     proto::Header h{player.id, sizeof mouseMove};
     auto [bufOut, n] = proto::makeMessage(h, &mouseMove);
 
-    printf("send mouseMove event with id %d\n", player.id);
     con.write(proto::mouseMoveChannel, bufOut, n, [bufOut](auto, auto) {
         delete[] bufOut;
     });

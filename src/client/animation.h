@@ -21,6 +21,9 @@ public:
 			filenames.push_back(files.paths[i]);
 		}
 
+		rl::UnloadDirectoryFiles(files);
+
+
 		std::sort(filenames.begin(), filenames.end());
 
 		for (const auto& filename : filenames) {
@@ -33,13 +36,15 @@ public:
 		frametime = duration / files.count;
 	}
 
+	/*
 	~Animation() {
-		while (!frames.empty()) {
-			rl::UnloadTexture(frames.back());
-			frames.pop_back();
+		printf("~Animation() called\n");
+		for(auto& frame : frames) {
+			rl::UnloadTexture(frame);
 		}
-		printf("~Animation() done\n");
+		frames.clear();
 	}
+	*/
 
 	rl::Texture& operator[](size_t idx) {
 		return frames.at(idx);

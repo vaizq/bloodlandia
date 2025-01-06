@@ -140,7 +140,7 @@ int main(int argc, char** argv)
                     if (dist < proto::playerRadius && !killed.contains(p.id) && p.id != b.shooterID) {
                         printf("player %d killed player %d\n", b.shooterID, p.id);
                         p.stats.deaths++;
-                        p.pos = rl::Vector2{0, 0};
+                        p.pos = rl::Vector2{RandFloat(100) - 50, RandFloat(100) - 50};
                         p.velo = rl::Vector2{0, 0};
                         killed.insert(p.id);
                         findPlayer(b.shooterID).stats.kills++;

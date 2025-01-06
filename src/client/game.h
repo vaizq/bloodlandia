@@ -20,7 +20,6 @@ struct Message {
 class Game {
 public:
 	Game(const char* serverAddr);
-	~Game();
 	void run();
 private:
 	void init();
