@@ -206,8 +206,6 @@ void Game::renderPlayer(const proto::Player& player, Animation& animation) {
                            rotation, 
                            rl::WHITE);
 
-        rl::DrawCircleLinesV(pos, hpx() * proto::playerRadius, rl::RED);
-
         rl::DrawText(std::format("ID: {} AT ({:.1f}, {:.1f})", player.id, player.pos.x, player.pos.y).c_str(), pos.x + origin.x, pos.y - origin.y, 14, rl::WHITE);
 }
 
