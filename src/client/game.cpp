@@ -226,13 +226,14 @@ void Game::render() {
         });
         std::stringstream ss;
         for (const auto& p : players) {
+                ss << std::format("ID: {:<6}\tKILLS: {:<6}\tDEATHS: {:<6}\tK/D: {:<6.1f}",
+                              p.id, p.stats.kills, p.stats.deaths, 1.0f * p.stats.kills / p.stats.deaths);
+
             if (p.id == player.id) {
-                ss << std::format("PLAYER-ID {:5}\tKILLS {:5}\tDEATHS {:5}\tK/D {:5.2f} <--- YOUR STATS!\n",
-                              p.id, p.stats.kills, p.stats.deaths, 1.0f * p.stats.kills / p.stats.deaths);
-            } else {
-                ss << std::format("PLAYER-ID {:5}\tKILLS {:5}\tDEATHS {:5}\tK/D {:5.2f}\n",
-                              p.id, p.stats.kills, p.stats.deaths, 1.0f * p.stats.kills / p.stats.deaths);
+                ss << " <--- YOU";
             }
+
+            ss << '\n';
         }
 
         rl::DrawText(ss.str().c_str(), 10, 50, 18, rl::GREEN);
