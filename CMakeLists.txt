@@ -7,11 +7,10 @@ project(PongOnline)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-set(CMAKE_BUILD_TYPE Debug)
+set(CMAKE_BUILD_TYPE Release)
 
-if (WIN32)
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -static-libgcc -static-libstdc++ -static")
-endif()
+set(BUILD_TESTS OFF)
+set(BUILD_SERVER ON)
 
 # Optionally set build type to Release
 #set(CMAKE_BUILD_TYPE Release)
@@ -20,7 +19,7 @@ Include(FetchContent)
 
 # Add Raylib package
 # Find Raylib if it's installed
-find_package(raylib REQUIRED)
+find_package(raylib)
 if (NOT raylib_FOUND) # If there's none, fetch and build raylib
   FetchContent_Declare(
     raylib
@@ -35,17 +34,22 @@ if (NOT raylib_FOUND) # If there's none, fetch and build raylib
   endif()
 endif()
 
-set(COMMON_SOURCES )
+FetchContent_Declare(
+    asio
+    GIT_REPOSITORY https://github.com/chriskohlhoff/asio.git
+    GIT_TAG        asio-1-28-0 # Replace with the desired version
+)
+
+FetchContent_MakeAvailable(asio)
 
 # Add source files for client and server
-add_executable(client src/client/main.cpp src/client/game.cpp ${COMMON_SOURCES})
+add_executable(client src/client/main.cpp src/client/game.cpp)
 
-target_include_directories(client PRIVATE internal /usr/local/include/)
+target_link_libraries(client raylib)
+target_include_directories(client PRIVATE internal ${asio_SOURCE_DIR}/asio/include)
+target_compile_definitions(client PRIVATE ASIO_STANDALONE)
 
-if (WIN32)
-    target_link_libraries(client raylib ws2_32)
-else()
-
+if (BUILD_TESTS)
   FetchContent_Declare(
     Catch2
     GIT_REPOSITORY https://github.com/catchorg/Catch2.git
@@ -54,13 +58,14 @@ else()
 
   FetchContent_MakeAvailable(Catch2)
 
-  add_executable(tests test/rand.cpp ${COMMON_SOURCES})
-  add_executable(server src/server/main.cpp ${COMMON_SOURCES})
-
-  target_link_libraries(client raylib)
-  target_link_libraries(server raylib)
+  add_executable(tests test/rand.cpp)
   target_link_libraries(tests raylib Catch2::Catch2WithMain)
+  target_include_directories(tests PRIVATE internal)
+endif()
 
-  target_include_directories(server PRIVATE internal /usr/local/include/)
-  target_include_directories(tests PRIVATE internal /usr/local/include/)
+if (BUILD_SERVER)
+  add_executable(server src/server/main.cpp)
+  target_link_libraries(server raylib)
+  target_include_directories(server PRIVATE internal ${asio_SOURCE_DIR}/asio/include)
+  target_compile_definitions(server PRIVATE ASIO_STANDALONE)
 endif()
