@@ -37,6 +37,7 @@ struct Player {
 	rl::Vector2 pos{0, 0};
 	rl::Vector2 velo{0, 0};
 	Stats stats;
+	Clock::time_point createdAt{Clock::now()};
 };
 
 struct Bullet {

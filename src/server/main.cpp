@@ -6,6 +6,7 @@
 
 
 using Clock = std::chrono::high_resolution_clock;
+using namespace std::chrono_literals;
 
 
 static proto::ID nextID() {
@@ -13,7 +14,7 @@ static proto::ID nextID() {
     return id++;
 }
 
-constexpr std::chrono::milliseconds bulletLiveDuration(1000);
+constexpr auto bulletLiveDuration = 1000ms;
 
 std::map<udp::endpoint, proto::ID> playerIDs;
 std::vector<proto::Bullet> bullets;
@@ -112,7 +113,6 @@ int main(int argc, char** argv)
             proto::Player& p = findPlayer(h.playerId);
             bullets.push_back(shoot.bullet);
             bullets.back().createdAt = Clock::now();
-            printf("player %d shot\ncurrently %ld bullets in air\n", p.id, bullets.size());
         } catch(const std::exception& e) {
             fprintf(stderr, "%s\n", e.what());
         }
@@ -140,10 +140,25 @@ int main(int argc, char** argv)
             }
         }
 
-        bullets.erase(std::remove_if(bullets.begin(), bullets.end(), [](const proto::Bullet& bullet) {
+        bullets.erase(std::remove_if(bullets.begin(), bullets.end(), [](const auto& bullet) {
             return Clock::now() - bullet.createdAt > bulletLiveDuration;
         }), bullets.end());
 
+        {
+            std::set<proto::ID> timedOutPlayers;
+            for (const auto& [peer, id] : playerIDs) {
+                const auto ping = server.getPing(peer);
+                if (ping > 500ms) {
+                    printf("player %d timed out\n", id);
+                    timedOutPlayers.insert(id);
+                }
+            }
+
+            players.erase(std::remove_if(players.begin(), players.end(), [&timedOutPlayers](const auto& player) {
+                const auto age = Clock::now() - player.createdAt;
+                return age > 1000ms && timedOutPlayers.contains(player.id);
+            }), players.end());
+        }
 
         state.numPlayers = 0;
         for (auto& p : players) {

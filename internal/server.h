@@ -83,6 +83,22 @@ public:
 		listeners[ch] = listener;
 	}
 
+	Clock::duration getPing(const udp::endpoint& peer) {
+		if (auto it = peers.find(peer); it != peers.end()) {
+			const auto& info = it->second;
+			const auto fromPrev = pingInterval * (info.prevPingID - info.prevReceivedPingID);
+
+			if (fromPrev > 2 * pingInterval) {
+				return fromPrev;
+			}
+			return info.ping;
+		} else {
+			fprintf(stderr, "ERROR\t unable to peerinfo for %s:%d\n",
+					peer.address().to_string().c_str(), peer.port());
+			return Clock::duration::max();
+		}
+	}
+
 	void poll() {
 		ioc.poll_one();
 	}
@@ -204,7 +220,8 @@ private:
 				auto& info = peers[peer];
 				if (h.id > info.prevReceivedPingID) {
 					const auto now = Clock::now();
-					info.ping = now - info.prevPing + pingInterval * (info.prevPingID - h.id);
+					const auto value = now - info.prevPing + pingInterval * (info.prevPingID - h.id);
+					info.ping =  (9 * info.ping + value) / 10;
 					info.prevReceivedPingID = h.id;
 				}
 				return;
@@ -220,7 +237,7 @@ private:
 	char bufIn[10000];
 	udp::endpoint peer;
 	asio::high_resolution_timer pingTimer;
-	static constexpr std::chrono::milliseconds pingInterval{1000};
+	static constexpr std::chrono::milliseconds pingInterval{200};
 };
 
 #endif
