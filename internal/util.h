@@ -1,8 +1,11 @@
 #ifndef UTIL_H
 #define UTIL_H
 
+#include <chrono>
 #include <random>
 #include "rl.h"
+
+using Clock = std::chrono::high_resolution_clock;
 
 // Returns random integer in range [0, n)
 static int RandInt(int n) {
@@ -37,6 +40,18 @@ static rl::Vector2 operator*(float a, rl::Vector2 b) {
 
 static rl::Vector2 operator/(rl::Vector2 v, float a) {
 	return rl::Vector2(v.x / a, v.y / a);
+}
+
+static float distance(rl::Vector2 a, rl::Vector2 b) {
+	return sqrt(pow(a.x - b.x, 2) + pow(a.y - b.y, 2));
+}
+
+static float length(rl::Vector2 v) {
+	return sqrt(v.x*v.x + v.y*v.y);
+}
+
+static rl::Vector2 unit(rl::Vector2 v) {
+	return v / length(v);
 }
 
 #endif

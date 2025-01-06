@@ -5,9 +5,7 @@
 #include <set>
 
 
-using Clock = std::chrono::high_resolution_clock;
 using namespace std::chrono_literals;
-
 
 static proto::ID nextID() {
     static proto::ID id{1};
@@ -107,6 +105,17 @@ int main(int argc, char** argv)
         }
     });
 
+    server.listen(proto::mouseMoveChannel, [](const udp::endpoint& ep, char* data, size_t n) {
+        try {
+            const auto [h, move] = parseMessage<proto::MouseMove>(ep, data, n);
+            proto::Player& p = findPlayer(h.playerId);
+            p.target = move.pos;
+        } catch(const std::exception& e) {
+            fprintf(stderr, "%s\n", e.what());
+        }
+    });
+
+
     server.listen(proto::shootChannel, [](const udp::endpoint& ep, char* data, size_t n) {
         try {
             const auto [h, shoot] = parseMessage<proto::Shoot>(ep, data, n);
@@ -127,7 +136,7 @@ int main(int argc, char** argv)
             std::set<proto::ID> killed;
             for (const auto& b : bullets) {
                 for (auto& p : players) {
-                    const float dist = sqrt(pow(p.pos.x - b.pos.x, 2) + pow(p.pos.y - b.pos.y, 2));
+                    const float dist = distance(p.pos, b.pos);
                     if (dist < proto::playerRadius && !killed.contains(p.id) && p.id != b.shooterID) {
                         printf("player %d killed player %d\n", b.shooterID, p.id);
                         p.stats.deaths++;
@@ -161,6 +170,22 @@ int main(int argc, char** argv)
                 const auto age = Clock::now() - player.createdAt;
                 return age > 1000ms && timedOutPlayers.contains(player.id);
             }), players.end());
+        }
+
+        {
+            // Handle collisions
+            for (auto ita = players.begin(); ita != players.end(); ++ita) {
+                for (auto itb = ita + 1; itb != players.end(); ++itb) {
+                    const auto diff = ita->pos - itb->pos;
+                    const float dist = length(diff);
+                    if (dist < 2 * proto::playerRadius) {
+                        const auto move = (2 * proto::playerRadius - dist) * diff / dist;
+                        ita->pos = ita->pos + move;
+                        itb->pos = itb->pos - move;
+                        printf("collision handled!\n");
+                    }
+                }
+            }
         }
 
         state.numPlayers = 0;

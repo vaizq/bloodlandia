@@ -13,14 +13,14 @@ using ID = uint32_t;
 
 constexpr float playerSpeed = 80.f;
 constexpr float bulletSpeed = 100.0f;
-constexpr float playerRadius = 1.f;
+constexpr float playerRadius = 5.f;
 constexpr float enemyRadius = 1.f;
 constexpr float bulletRadius = 0.1f;
 
 constexpr Channel moveChannel = openChannelStart + 1;
 constexpr Channel shootChannel = openChannelStart + 2;
 constexpr Channel updateChannel = openChannelStart + 3;
-constexpr Channel pingChannel = openChannelStart + 4;
+constexpr Channel mouseMoveChannel = openChannelStart + 4;
 
 struct Header {
 	ID playerId;
@@ -38,6 +38,7 @@ struct Player {
 	rl::Vector2 velo{0, 0};
 	Stats stats;
 	Clock::time_point createdAt{Clock::now()};
+	rl::Vector2 target{0, 0};
 };
 
 struct Bullet {
@@ -56,6 +57,10 @@ struct GameState {
 
 struct Move {
 	rl::Vector2 velo;
+};
+
+struct MouseMove {
+	rl::Vector2 pos;
 };
 
 struct Shoot {

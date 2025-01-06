@@ -19,8 +19,6 @@ struct PingMessage {
 
 class Ping {
 public:
-	using Clock = std::chrono::high_resolution_clock;
-
 	Ping(Connection& connection, Clock::duration interval = std::chrono::milliseconds(100))
 	: connection{connection},
 	  interval{interval},

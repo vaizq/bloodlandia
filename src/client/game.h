@@ -8,12 +8,9 @@
 #include <map>
 #include "protocol.h"
 #include "connection.h"
+#include "animation.h"
 
 using udp = asio::ip::udp;
-
-struct Player : public proto::Player {
-	rl::Vector2 target;
-};
 
 struct Message {
 	proto::Header header;
@@ -21,9 +18,9 @@ struct Message {
 };
 
 class Game {
-	using Clock = std::chrono::high_resolution_clock;
 public:
 	Game(const char* serverAddr);
+	~Game();
 	void run();
 private:
 	void init();
@@ -34,18 +31,21 @@ private:
 	proto::ID nextID();
 	void eventMove();
 	void eventShoot();
+	void eventMouseMove();
 
 	rl::Vector2 worldPosToScreenCoord(rl::Vector2 pos);
 	rl::Vector2 screenCoordToWorldPos(rl::Vector2 coord);
+	void renderPlayer(const proto::Player& player, Animation& animation);
 
 	Clock::time_point prevUpdate;
 	Clock::time_point prevServerUpdate;
 	Connection con;
 
-	Player player;
+	proto::Player player;
 	std::vector<proto::Player> enemies;
 	std::vector<proto::Bullet> bullets;
 	bool viewStats{false};
+	std::unique_ptr<Animation> moveAnimation;
 };
 
 

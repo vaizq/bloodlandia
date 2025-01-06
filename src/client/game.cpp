@@ -14,7 +14,6 @@ int renderHeight = 960;
 float viewHeight = 50.f;
 
 
-
 float aspectRatio() {
     return 1.0f * renderWidth / renderHeight;
 }
@@ -69,6 +68,7 @@ Game::Game(const char* serverAddr)
                 player.pos = p.pos;
                 player.velo = p.velo;
                 player.stats = p.stats;
+                player.target = p.target;
             } else {
                 enemies.push_back(p);
             }
@@ -81,10 +81,18 @@ Game::Game(const char* serverAddr)
     });
 }
 
+Game::~Game() {
+    moveAnimation.reset();
+    rl::CloseWindow();
+}
+
+
 void Game::init() {
     rl::InitWindow(renderWidth, renderHeight, "Verilandia");
     rl::SetTargetFPS(144);
     rl::HideCursor();
+
+    moveAnimation = std::make_unique<Animation>("assets/Top_Down_Survivor/rifle/move", 1000ms);
 
     prevUpdate = Clock::now();
     player.pos.x = 0;
@@ -98,7 +106,8 @@ void Game::update() {
     renderHeight = rl::GetRenderHeight();
 
     const auto now = Clock::now();
-    const float dt = std::chrono::duration_cast<std::chrono::duration<float>>(now - prevUpdate).count();
+    const auto dt = now - prevUpdate;
+    const float dtf = std::chrono::duration_cast<std::chrono::duration<float>>(dt).count();
     prevUpdate = now;
 
     const auto prevVelo = player.velo;
@@ -157,47 +166,72 @@ void Game::update() {
         eventShoot();
     }
 
+    {
+        const auto pos = rl::GetMousePosition();
+        const auto wpos = screenCoordToWorldPos(pos);
+        if (wpos.x != player.target.x || wpos.y != player.target.y) {
+            player.target = wpos;
+            static Clock::time_point prevEvent{};
+            if (Clock::now() - prevEvent > 30ms) {
+                eventMouseMove();
+            }
+        }
+
+    }
+
     if (player.velo.x != prevVelo.x || player.velo.y != prevVelo.y) {
         eventMove();
     }
 
-    viewHeight += 5.f * rl::GetMouseWheelMove();
+//    viewHeight += 5.f * rl::GetMouseWheelMove();
 
-    player.pos = player.pos + dt * player.velo;
+    player.pos = player.pos + dtf * player.velo;
 
     for (auto& enemy : enemies) {
-        enemy.pos = enemy.pos + dt * enemy.velo;
+        enemy.pos = enemy.pos + dtf * enemy.velo;
     }
 
     for (auto& bullet : bullets) {
-        bullet.pos = bullet.pos + dt * bullet.velo;
+        bullet.pos = bullet.pos + dtf * bullet.velo;
     }
 
+//    moveAnimation->update(dt);
     con.poll();
 }
+
+void Game::renderPlayer(const proto::Player& player, Animation& animation) {
+        const auto pos = (player.id == this->player.id ? screenCenter() : worldPosToScreenCoord(player.pos));
+        auto& frame = animation.currentFrame();
+        const auto diff = player.target - player.pos;
+        const float rotation =  RAD2DEG * std::atan2(diff.y, diff.x);
+        const rl::Vector2 origin{3 * frame.width / 8.f, 5 * frame.height / 8.f};
+
+        rl::DrawTexturePro(frame, 
+                           {0, 0, (float)frame.width, (float)frame.height},
+                           {pos.x, pos.y, (float)frame.width, (float)frame.height}, 
+                           origin,
+                           rotation, 
+                           rl::WHITE);
+
+        rl::DrawCircleLinesV(pos, hpx() * proto::playerRadius, rl::RED);
+
+        rl::DrawText(std::format("ID: {} AT ({:.1f}, {:.1f})", player.id, player.pos.x, player.pos.y).c_str(), pos.x + origin.x, pos.y - origin.y, 14, rl::WHITE);
+}
+
 
 void Game::render() {
     rl::BeginDrawing();
     rl::ClearBackground(rl::BLACK);
 
-    {
-        const auto pos = screenCenter();
-        const float r = proto::playerRadius * hpx();
-        rl::DrawCircleV(screenCenter(), r, rl::WHITE);
-        rl::DrawText(std::format("({:.1f}, {:.1f})", player.pos.x, player.pos.y).c_str(), pos.x + r, pos.y - r, 12, rl::WHITE);
-    }
+    renderPlayer(player, *moveAnimation);
 
     for(auto& enemy : enemies) {
-        const auto pos = worldPosToScreenCoord(enemy.pos);
-        const float r = proto::enemyRadius * hpx();
-        rl::DrawCircleV(pos, r, rl::GRAY);
-        rl::DrawText(std::format("({:.1f}, {:.1f})", enemy.pos.x, enemy.pos.y).c_str(), pos.x + r, pos.y - r, 12, rl::WHITE);
+        renderPlayer(enemy, *moveAnimation);
     }
 
     {
         const auto pos = rl::GetMousePosition();
         const auto wpos = screenCoordToWorldPos(pos);
-        player.target = wpos;
         const float w = 20.0f;
         rl::DrawLine(pos.x - w/2, pos.y, pos.x + w/2, pos.y, rl::GREEN);
         rl::DrawLine(pos.x, pos.y - w/2, pos.x, pos.y + w/2, rl::GREEN);
@@ -264,6 +298,19 @@ void Game::eventMove() {
         delete[] bufOut;
     });
 }
+
+void Game::eventMouseMove() {
+    proto::MouseMove mouseMove{player.target};
+    proto::Header h{player.id, sizeof mouseMove};
+    auto [bufOut, n] = proto::makeMessage(h, &mouseMove);
+
+    printf("send mouseMove event with id %d\n", player.id);
+    con.write(proto::mouseMoveChannel, bufOut, n, [bufOut](auto, auto) {
+        delete[] bufOut;
+    });
+
+}
+
 
 void Game::eventShoot() {
     
