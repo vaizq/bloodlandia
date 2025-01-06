@@ -146,11 +146,14 @@ int main(int argc, char** argv)
 
         {
             std::set<proto::ID> timedOutPlayers;
-            for (const auto& [peer, id] : playerIDs) {
-                const auto ping = server.getPing(peer);
+            for (auto it = playerIDs.begin(); it != playerIDs.end();) {
+                const auto ping = server.getPing(it->first);
                 if (ping > 500ms) {
-                    printf("player %d timed out\n", id);
-                    timedOutPlayers.insert(id);
+                    printf("player %d timed out\n", it->second);
+                    timedOutPlayers.insert(it->second);
+                    it = playerIDs.erase(it);
+                } else {
+                    ++it;
                 }
             }
 
