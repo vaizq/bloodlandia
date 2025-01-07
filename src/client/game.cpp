@@ -1,7 +1,6 @@
 #include "game.h"
 #include <chrono>
 #include <cstring>
-#include <raylib.h>
 #include "util.h"
 #include <format>
 #include "protocol.h"
@@ -88,8 +87,8 @@ void Game::init() {
     moveAnimation = std::make_unique<Animation>("assets/Top_Down_Survivor/rifle/move", 1000ms);
 
     prevUpdate = Clock::now();
-    player.pos.x = RandFloat(100) - 50;
-    player.pos.y = RandFloat(100) - 50;
+    player.pos.x = 0;
+    player.pos.y = 0;
     player.velo.x = 0;
     player.velo.y = 0;
 }
@@ -309,7 +308,7 @@ void Game::eventShoot() {
         return;
     }
 
-    diff = (diff / sqrt(diff.x*diff.x + diff.y*diff.y));
+    diff = (diff / length(diff));
 
     const proto::Bullet bullet(
         player.pos + proto::playerRadius * diff, 

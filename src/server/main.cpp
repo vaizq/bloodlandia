@@ -45,7 +45,7 @@ std::pair<proto::Header, T> parseMessage(const udp::endpoint& ep, const char* da
         if (!playerIDs.contains(ep)) {
             const proto::ID id = nextID();
             playerIDs[ep] = id;
-            players.push_back(proto::Player{id});
+            players.push_back(proto::Player{id, {RandFloat(100)-50, RandFloat(100)-50}});
             h.playerId = id;
             printf("INFO\t new player connected %s:%d id %d\n", ep.address().to_string().c_str(), ep.port(), id);
         }
@@ -140,7 +140,7 @@ int main(int argc, char** argv)
                     if (dist < proto::playerRadius && !killed.contains(p.id) && p.id != b.shooterID) {
                         printf("player %d killed player %d\n", b.shooterID, p.id);
                         p.stats.deaths++;
-                        p.pos = rl::Vector2{RandFloat(100) - 50, RandFloat(100) - 50};
+                        p.pos = rl::Vector2{0, 0};
                         p.velo = rl::Vector2{0, 0};
                         killed.insert(p.id);
                         findPlayer(b.shooterID).stats.kills++;
