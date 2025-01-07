@@ -147,12 +147,17 @@ int main(int argc, char** argv)
                 for (auto& p : players) {
                     const float dist = distance(p.pos, b.pos);
                     if (dist < proto::playerRadius && !killed.contains(p.id) && p.id != b.shooterID) {
-                        printf("player %d killed player %d\n", b.shooterID, p.id);
-                        p.stats.deaths++;
-                        p.pos = spawnPos();
-                        p.velo = rl::Vector2{0, 0};
-                        killed.insert(p.id);
-                        findPlayer(b.shooterID).stats.kills++;
+                        const int damage = 20;
+                        if (p.health <= damage) {
+                            p.stats.deaths++;
+                            p.pos = spawnPos();
+                            p.velo = rl::Vector2{0, 0};
+                            p.health = proto::maxHealth;
+                            killed.insert(p.id);
+                            findPlayer(b.shooterID).stats.kills++;
+                        } else {
+                            p.health -= damage;
+                        }
                     }
                 }
             }

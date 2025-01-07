@@ -217,7 +217,7 @@ void Game::renderPlayer(const proto::Player& player, Animation& animation) {
                            rotation, 
                            rl::WHITE);
 
-        rl::DrawText(std::format("ID: {} AT ({:.1f}, {:.1f})", player.id, player.pos.x, player.pos.y).c_str(), pos.x + origin.x, pos.y - origin.y, 14, rl::WHITE);
+        rl::DrawText(std::format("HEALTH {}", player.health).c_str(), pos.x + origin.x, pos.y - origin.y, 16, rl::RED);
 }
 
 void Game::renderMatrix() {
@@ -269,8 +269,7 @@ void Game::render() {
         for(auto& bullet : bullets) {
             const auto pos = worldPosToScreenCoord(bullet.pos);
             const float r = proto::bulletRadius * hpx();
-            rl::DrawCircleV(pos, r, rl::GRAY);
-            rl::DrawText(std::format("{}", bullet.shooterID).c_str(), pos.x + r, pos.y - r, 12, rl::WHITE);
+            rl::DrawCircleV(pos, r, rl::GOLD);
         }
     }
 

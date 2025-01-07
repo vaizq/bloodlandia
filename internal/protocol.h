@@ -16,6 +16,7 @@ constexpr float bulletSpeed = 100.0f;
 constexpr float playerRadius = 5.f / 6;
 constexpr float enemyRadius = 1.f;
 constexpr float bulletRadius = 0.1f;
+constexpr uint32_t maxHealth{100};
 
 constexpr Channel moveChannel = openChannelStart + 1;
 constexpr Channel shootChannel = openChannelStart + 2;
@@ -39,6 +40,7 @@ struct Player {
 	Stats stats;
 	Clock::time_point createdAt{Clock::now()};
 	rl::Vector2 target{0, 0};
+	uint32_t health{maxHealth};
 };
 
 struct Bullet {
