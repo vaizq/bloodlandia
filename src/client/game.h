@@ -4,6 +4,10 @@
 #include <chrono>
 #include <vector>
 #include <asio.hpp>
+// Hack to make build work with mingw compiler
+#ifdef DrawText
+#undef DrawText
+#endif
 #include "protocol.h"
 #include "connection.h"
 #include "animation.h"
