@@ -11,6 +11,8 @@
 #include "protocol.h"
 #include "connection.h"
 #include "animation.h"
+#include "world.h"
+
 
 using udp = asio::ip::udp;
 
@@ -46,6 +48,7 @@ private:
 	std::vector<proto::Bullet> bullets;
 	bool viewStats{false};
 	std::unique_ptr<Animation> moveAnimation;
+	World world;
 };
 
 

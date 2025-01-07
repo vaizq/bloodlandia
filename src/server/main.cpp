@@ -3,6 +3,8 @@
 #include <chrono>
 #include "util.h"
 #include <set>
+#include "world.h"
+#include "collision.h"
 
 
 using namespace std::chrono_literals;
@@ -19,6 +21,7 @@ std::vector<proto::Bullet> bullets;
 std::vector<proto::Player> players;
 proto::GameState state;
 int tickrate;
+World world;
 
 proto::Player& findPlayer(proto::ID id) {
         auto it = std::find_if(players.begin(), players.end(), [id](const proto::Player& p) {
@@ -164,7 +167,20 @@ int main(int argc, char** argv)
         }
 
         bullets.erase(std::remove_if(bullets.begin(), bullets.end(), [](const auto& bullet) {
-            return Clock::now() - bullet.createdAt > bulletLiveDuration;
+            const auto expired = Clock::now() - bullet.createdAt > bulletLiveDuration;
+            if (expired) {
+                return true;
+            } else {
+                for (const auto& block : world.getBlocks()) {
+                    if (CheckCollisionPointAndRec(
+                        bullet.pos.x, bullet.pos.y, 
+                        block.pos.x, block.pos.y, block.size.x, block.size.y
+                    )) {
+                        return true;
+                    }
+                }
+                return false;
+            }
         }), bullets.end());
 
         {
@@ -187,7 +203,26 @@ int main(int argc, char** argv)
         }
 
         {
-            // Handle collisions
+            // Handle collision between players and world
+            for (auto& p : players) {
+                for (const auto& block : world.getBlocks()) {
+                    if (CheckCollisionPointAndRec(
+                        p.pos.x, p.pos.y, 
+                        block.pos.x, block.pos.y, block.size.x, block.size.y
+                    )) {
+                        const auto center = block.pos + block.size / 2.f;
+                        const auto diff = p.pos - center;
+                        if (std::abs(diff.x) > std::abs(diff.y)) {
+                            p.pos.x = center.x + (block.size.x / 2 + proto::playerRadius) * diff.x / std::abs(diff.x);
+                        } else {
+                            p.pos.y = center.y + (block.size.y / 2 + proto::playerRadius) * diff.y / std::abs(diff.y);
+                        }
+                        printf("world collision!\n");
+                    }
+                }
+            }
+
+            // Handle collision between players
             for (auto ita = players.begin(); ita != players.end(); ++ita) {
                 for (auto itb = ita + 1; itb != players.end(); ++itb) {
                     const auto diff = ita->pos - itb->pos;
@@ -196,7 +231,7 @@ int main(int argc, char** argv)
                         const auto move = (2 * proto::playerRadius - dist) * diff / dist;
                         ita->pos = ita->pos + move;
                         itb->pos = itb->pos - move;
-                        printf("collision handled!\n");
+                        printf("player collision!\n");
                     }
                 }
             }

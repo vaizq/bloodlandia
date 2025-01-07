@@ -217,7 +217,7 @@ void Game::renderPlayer(const proto::Player& player, Animation& animation) {
                            rotation, 
                            rl::WHITE);
 
-        rl::DrawText(std::format("HEALTH {}", player.health).c_str(), pos.x + origin.x, pos.y - origin.y, 16, rl::RED);
+        rl::DrawText(std::format("HEALTH {}", player.health).c_str(), pos.x + origin.x, pos.y - origin.y, 14, rl::WHITE);
 }
 
 void Game::renderMatrix() {
@@ -240,6 +240,15 @@ void Game::renderMatrix() {
         auto start = worldPosToScreenCoord({x, origin.y});
         auto end = worldPosToScreenCoord({x, origin.y + h});
         rl::DrawLineV(start, end, rl::GREEN);
+    }
+
+    const auto center = screenCenter();
+    for (const auto& block : world.getBlocks()) {
+        const auto size = hpx() * block.size;
+        const auto pos = worldPosToScreenCoord(block.pos);
+        //if (std::abs(pos.x - center.x) < (renderWidth / 2.f + size.x) && std::abs(pos.y - center.y) < (renderHeight / 2.f + size.y)) {
+            rl::DrawRectangleV(pos, size, rl::GREEN);
+        //}
     }
 }
 
@@ -273,9 +282,11 @@ void Game::render() {
         }
     }
 
+    rl::DrawFPS(10, 10);
+
     {
         const float ping = std::chrono::duration_cast<std::chrono::duration<float, std::milli>>(con.getPing()).count();
-        rl::DrawText(std::format("ping {:.3f}ms", ping).c_str(), 10, 10, 16, rl::WHITE);
+        rl::DrawText(std::format("ping {:.3f}ms", ping).c_str(), 10, 30, 16, rl::WHITE);
     }
 
     if (viewStats) {
@@ -298,6 +309,7 @@ void Game::render() {
 
         rl::DrawText(ss.str().c_str(), 10, 50, 18, rl::GREEN);
     }
+
 
     rl::EndDrawing();
 }
