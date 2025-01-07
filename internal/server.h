@@ -200,13 +200,12 @@ private:
 			}
 			case Header::Type::Reliable:
 			{
-				send({h.channel, 0, Header::Type::Confirmation, h.id}, {peer, {}});						
 				auto& prevID = peers[peer].chInfo[h.channel].receiveReliableID;
-				if (h.id < prevID) {
-					printf("INFO\t received old message %d\n", h.id);
-					return;
-				} else {
+				if (h.id > prevID) {
+					send({h.channel, 0, Header::Type::Confirmation, h.id}, {peer, {}});						
 					prevID = h.id;
+				} else {
+					return;
 				}
 				break;
 			}

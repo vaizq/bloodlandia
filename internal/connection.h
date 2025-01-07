@@ -42,6 +42,12 @@ static constexpr Channel pingChannel{1};
 static constexpr Channel openChannelStart{69};
 
 class Connection {
+	struct ChannelInfo {
+		uint32_t writeID{0};
+		uint32_t writeReliableID{0};
+		uint32_t recvID{0};
+		uint32_t recvReliableID{0};
+	};
 
 	struct Message {
 		Header header;
@@ -65,22 +71,22 @@ public:
 	}
 
 	void write(Channel channel, const void* data, size_t dataLen, Handler handler = [](std::error_code, size_t){}) {
-		static uint32_t id{0};
+		uint32_t id = ++chInfos[channel].writeID;
 		send(
-			Header{channel, (uint32_t)dataLen, Header::Type::Unreliable, ++id}, 
+			Header{channel, (uint32_t)dataLen, Header::Type::Unreliable, id}, 
 			data, 
 			handler
 		);
 	}
 
 	void writeReliable(Channel channel, const void* data, size_t dataLen, Handler handler = [](std::error_code, size_t){}) {
-		static uint32_t id{0};
+		uint32_t id = ++chInfos[channel].writeReliableID;
 
-		const Message& msg = waitingForConfirmation[++id] = Message{
+		const Message& msg = (waitingForConfirmation[id] = Message{
 			Header{channel, (uint32_t)dataLen, Header::Type::Reliable, id},
 			{(const char*) data, ((const char*) data) + dataLen}, 
 			handler
-		};
+		});
 
 		send(msg);
 	}
@@ -228,6 +234,7 @@ private:
 	asio::high_resolution_timer timer;
 	bool isConnected_{false};
 	Clock::duration ping{0};
+	std::map<Channel, ChannelInfo> chInfos;
 };
 
 

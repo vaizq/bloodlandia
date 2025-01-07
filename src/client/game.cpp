@@ -319,7 +319,7 @@ void Game::eventMove() {
     proto::Header h{player.id, sizeof move};
     auto [bufOut, n] = proto::makeMessage(h, &move);
 
-    con.write(proto::moveChannel, bufOut, n, [bufOut](auto, auto) {
+    con.writeReliable(proto::moveChannel, bufOut, n, [bufOut](auto, auto) {
         delete[] bufOut;
     });
 }
