@@ -5,6 +5,12 @@
 #include <format>
 #include "protocol.h"
 
+
+#ifdef DrawText
+#undef DrawText
+#endif
+
+
 using namespace std::chrono_literals;
 
 

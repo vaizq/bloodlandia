@@ -4,7 +4,7 @@ cmake_minimum_required(VERSION 3.10)
 project(PongOnline)
 
 # Set the C++ standard to C++20
-set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_BUILD_TYPE Release)
@@ -45,7 +45,13 @@ FetchContent_MakeAvailable(asio)
 # Add source files for client and server
 add_executable(client src/client/main.cpp src/client/game.cpp)
 
-target_link_libraries(client raylib)
+if(WIN32)
+  target_link_libraries(client raylib ws2_32)
+else()
+  target_link_libraries(client raylib)
+endif()
+
+
 target_include_directories(client PRIVATE internal ${asio_SOURCE_DIR}/asio/include)
 target_compile_definitions(client PRIVATE ASIO_STANDALONE)
 
@@ -65,7 +71,13 @@ endif()
 
 if (BUILD_SERVER)
   add_executable(server src/server/main.cpp)
-  target_link_libraries(server raylib)
+
+  if(WIN32)
+    target_link_libraries(server raylib ws2_32)
+  else()
+    target_link_libraries(server raylib)
+  endif()
+
   target_include_directories(server PRIVATE internal ${asio_SOURCE_DIR}/asio/include)
   target_compile_definitions(server PRIVATE ASIO_STANDALONE)
 endif()

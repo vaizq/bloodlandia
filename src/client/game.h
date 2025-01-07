@@ -2,10 +2,8 @@
 #define GAME_H
 
 #include <chrono>
-#include "rl.h"
 #include <vector>
 #include <asio.hpp>
-#include <map>
 #include "protocol.h"
 #include "connection.h"
 #include "animation.h"
@@ -25,9 +23,7 @@ private:
 	void init();
 	void update();
 	void render();
-	void startReceive();
 
-	proto::ID nextID();
 	void eventMove();
 	void eventShoot();
 	void eventMouseMove();
