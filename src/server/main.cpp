@@ -107,6 +107,7 @@ int main(int argc, char** argv)
             const auto [h, move] = parseMessage<proto::Move>(ep, data, n);
             proto::Player& p = findPlayer(h.playerId);
             float velo = length(move.velo);
+            printf("move.velo %.2f, %.2f\n", move.velo.x, move.velo.y);
             if (velo > 0) {
                 p.velo = proto::playerSpeed * move.velo / length(move.velo);
             } else {

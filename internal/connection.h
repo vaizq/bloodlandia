@@ -53,6 +53,7 @@ class Connection {
 		Header header;
 		std::vector<char> payload;
 		Handler handler;
+		Clock::time_point createdAt;
 	};
 
 public:
@@ -156,7 +157,10 @@ private:
 			}
 
 			for (auto& [_, msg] : waitingForConfirmation) {
-				send(msg);
+				if (Clock::now() - msg.createdAt > 2 * ping) {
+					printf("resend id=%d\n", msg.header.id);
+					send(msg);
+				}
 			}
 			
 

@@ -109,58 +109,22 @@ void Game::update() {
     prevUpdate = now;
 
     const auto prevVelo = player.velo;
+    player.velo.x = (rl::IsKeyDown(rl::KEY_D) - rl::IsKeyDown(rl::KEY_A)) * proto::playerSpeed;
+    player.velo.y = (rl::IsKeyDown(rl::KEY_S) - rl::IsKeyDown(rl::KEY_W)) * proto::playerSpeed;
 
-    if (rl::IsKeyPressed(rl::KEY_A)) {
-        player.velo.x = -proto::playerSpeed;
-    } else if (rl::IsKeyReleased(rl::KEY_A)) {
-        if (rl::IsKeyDown(rl::KEY_D)) {
-            player.velo.x = proto::playerSpeed;
-        } else {
-            player.velo.x = 0;
-        }
+    const float velo = length(player.velo);
+    if (velo > 0) {
+        player.velo = proto::playerSpeed * player.velo / length(player.velo);
     }
 
-    if (rl::IsKeyPressed(rl::KEY_D)) {
-        player.velo.x = proto::playerSpeed;
-    } else if (rl::IsKeyReleased(rl::KEY_D)) {
-        if (rl::IsKeyDown(rl::KEY_A)) {
-            player.velo.x = -proto::playerSpeed;
-        } else {
-            player.velo.x = 0;
-        }
-
+    if (std::abs(player.velo.x - prevVelo.x) > std::numeric_limits<float>::epsilon() || 
+        std::abs(player.velo.y - prevVelo.y) > std::numeric_limits<float>::epsilon()) {
+        printf("MOVE: velo(%f, %f)\n", player.velo.x, player.velo.y);
+        eventMove();
     }
 
-    if (rl::IsKeyPressed(rl::KEY_W)) {
-        player.velo.y = -proto::playerSpeed;
-    } else if (rl::IsKeyReleased(rl::KEY_W)) {
-        if (rl::IsKeyDown(rl::KEY_S)) {
-            player.velo.y = proto::playerSpeed;
-        } else {
-            player.velo.y = 0;
-        }
-
-    }
-
-    if (rl::IsKeyPressed(rl::KEY_S)) {
-        player.velo.y = proto::playerSpeed;
-    } else if (rl::IsKeyReleased(rl::KEY_S)) {
-        if (rl::IsKeyDown(rl::KEY_W)) {
-            player.velo.y = -proto::playerSpeed;
-        } else {
-            player.velo.y = 0;
-        }
-    }
-
-    if (rl::IsKeyDown(rl::KEY_TAB)) {
-        viewStats = true;
-    } else {
-        viewStats = false;
-    }
 
     if (rl::IsMouseButtonPressed(rl::MOUSE_BUTTON_LEFT)) {
-        const auto target = rl::GetMousePosition();
-        const auto direction = {target - player.pos};
         eventShoot();
     }
 
@@ -177,15 +141,7 @@ void Game::update() {
 
     }
 
-    if (player.velo.x != prevVelo.x || player.velo.y != prevVelo.y) {
-        const float velo = length(player.velo);
-        if (velo != 0) {
-            player.velo = proto::playerSpeed * player.velo / length(player.velo);
-        }
-        eventMove();
-    }
-
-//    viewHeight += 5.f * rl::GetMouseWheelMove();
+    viewStats = rl::IsKeyDown(rl::KEY_TAB);
 
     player.pos = player.pos + dtf * player.velo;
 
@@ -217,7 +173,7 @@ void Game::renderPlayer(const proto::Player& player, Animation& animation) {
                            rotation, 
                            rl::WHITE);
 
-        rl::DrawText(std::format("HEALTH {}", player.health).c_str(), pos.x + origin.x, pos.y - origin.y, 14, rl::WHITE);
+        rl::DrawText(std::format("HEALTH {}", player.health).c_str(), pos.x + origin.x, pos.y - origin.y, 14, player.health > 25 ? rl::WHITE : rl::RED);
 }
 
 void Game::renderMatrix() {

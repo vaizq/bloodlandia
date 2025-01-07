@@ -201,7 +201,7 @@ private:
 			case Header::Type::Reliable:
 			{
 				auto& prevID = peers[peer].chInfo[h.channel].receiveReliableID;
-				if (h.id > prevID) {
+				if (h.id == prevID + 1) {
 					send({h.channel, 0, Header::Type::Confirmation, h.id}, {peer, {}});						
 					prevID = h.id;
 				} else {
