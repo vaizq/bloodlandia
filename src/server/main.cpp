@@ -33,6 +33,10 @@ proto::Player& findPlayer(proto::ID id) {
         return *it;
 }
 
+rl::Vector2 spawnPos() {
+    return {RandFloat(100)-50, RandFloat(100)-50};
+}
+
 template <typename T>
 std::pair<proto::Header, T> parseMessage(const udp::endpoint& ep, const char* data, size_t n) {
         if (n < sizeof (proto::Header)) {
@@ -45,7 +49,7 @@ std::pair<proto::Header, T> parseMessage(const udp::endpoint& ep, const char* da
         if (!playerIDs.contains(ep)) {
             const proto::ID id = nextID();
             playerIDs[ep] = id;
-            players.push_back(proto::Player{id, {RandFloat(100)-50, RandFloat(100)-50}});
+            players.push_back(proto::Player{id, spawnPos()});
             h.playerId = id;
             printf("INFO\t new player connected %s:%d id %d\n", ep.address().to_string().c_str(), ep.port(), id);
         }
@@ -99,7 +103,12 @@ int main(int argc, char** argv)
         try {
             const auto [h, move] = parseMessage<proto::Move>(ep, data, n);
             proto::Player& p = findPlayer(h.playerId);
-            p.velo = move.velo;
+            float velo = length(move.velo);
+            if (velo > 0) {
+                p.velo = proto::playerSpeed * move.velo / length(move.velo);
+            } else {
+                p.velo = move.velo;
+            }
         } catch(const std::exception& e) {
             fprintf(stderr, "%s\n", e.what());
         }
@@ -140,7 +149,7 @@ int main(int argc, char** argv)
                     if (dist < proto::playerRadius && !killed.contains(p.id) && p.id != b.shooterID) {
                         printf("player %d killed player %d\n", b.shooterID, p.id);
                         p.stats.deaths++;
-                        p.pos = rl::Vector2{0, 0};
+                        p.pos = spawnPos();
                         p.velo = rl::Vector2{0, 0};
                         killed.insert(p.id);
                         findPlayer(b.shooterID).stats.kills++;

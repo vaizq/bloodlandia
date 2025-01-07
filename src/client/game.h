@@ -31,6 +31,7 @@ private:
 	rl::Vector2 worldPosToScreenCoord(rl::Vector2 pos);
 	rl::Vector2 screenCoordToWorldPos(rl::Vector2 coord);
 	void renderPlayer(const proto::Player& player, Animation& animation);
+	void renderMatrix();
 
 	Clock::time_point prevUpdate;
 	Clock::time_point prevServerUpdate;

@@ -178,6 +178,10 @@ void Game::update() {
     }
 
     if (player.velo.x != prevVelo.x || player.velo.y != prevVelo.y) {
+        const float velo = length(player.velo);
+        if (velo != 0) {
+            player.velo = proto::playerSpeed * player.velo / length(player.velo);
+        }
         eventMove();
     }
 
@@ -202,11 +206,13 @@ void Game::renderPlayer(const proto::Player& player, Animation& animation) {
         auto& frame = animation.currentFrame();
         const auto diff = player.target - player.pos;
         const float rotation =  RAD2DEG * std::atan2(diff.y, diff.x);
-        const rl::Vector2 origin{3 * frame.width / 8.f, 5 * frame.height / 8.f};
+        const float w = (float)frame.width / 6;
+        const float h = (float)frame.height / 6;
+        const rl::Vector2 origin{3 * w / 8.f, 5 * h / 8.f};
 
         rl::DrawTexturePro(frame, 
                            {0, 0, (float)frame.width, (float)frame.height},
-                           {pos.x, pos.y, (float)frame.width, (float)frame.height}, 
+                           {pos.x, pos.y, w, h}, 
                            origin,
                            rotation, 
                            rl::WHITE);
@@ -214,16 +220,41 @@ void Game::renderPlayer(const proto::Player& player, Animation& animation) {
         rl::DrawText(std::format("ID: {} AT ({:.1f}, {:.1f})", player.id, player.pos.x, player.pos.y).c_str(), pos.x + origin.x, pos.y - origin.y, 14, rl::WHITE);
 }
 
+void Game::renderMatrix() {
+    const int n = 5;
+    const float w = aspectRatio() * viewHeight + 4 * n;
+    const float h = viewHeight + 4 * n;
+    const int px = std::floor(player.pos.x - n);
+    const int py = std::floor(player.pos.y - n);
+    const rl::Vector2 origin{(px - px % n) - w / 2, (py - py % n) - h / 2};
+
+    for (int i = 0; i < h; i += n) {
+        const float y = origin.y + i;
+        auto start = worldPosToScreenCoord({origin.x, y});
+        auto end = worldPosToScreenCoord({origin.x + w, y});
+        rl::DrawLineV(start, end, rl::GREEN);
+    }
+
+    for (int j = 0; j < w; j += n) {
+        const float x = origin.x + j;
+        auto start = worldPosToScreenCoord({x, origin.y});
+        auto end = worldPosToScreenCoord({x, origin.y + h});
+        rl::DrawLineV(start, end, rl::GREEN);
+    }
+}
+
 
 void Game::render() {
     rl::BeginDrawing();
     rl::ClearBackground(rl::BLACK);
 
-    renderPlayer(player, *moveAnimation);
+    renderMatrix();
 
     for(auto& enemy : enemies) {
         renderPlayer(enemy, *moveAnimation);
     }
+
+    renderPlayer(player, *moveAnimation);
 
     {
         const auto pos = rl::GetMousePosition();

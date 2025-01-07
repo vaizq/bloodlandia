@@ -11,9 +11,9 @@ namespace proto {
 
 using ID = uint32_t;
 
-constexpr float playerSpeed = 80.f;
+constexpr float playerSpeed = 15.f;
 constexpr float bulletSpeed = 100.0f;
-constexpr float playerRadius = 5.f;
+constexpr float playerRadius = 5.f / 6;
 constexpr float enemyRadius = 1.f;
 constexpr float bulletRadius = 0.1f;
 
